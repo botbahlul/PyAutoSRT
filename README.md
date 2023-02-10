@@ -1,5 +1,7 @@
 # pyautosrt <a href="https://pypi.python.org/pypi/pyautosrt"><img src="https://img.shields.io/pypi/v/pyautosrt.svg"></img></a>
-  
+
+https://user-images.githubusercontent.com/88623122/218177033-940cde90-1f6a-444a-b9e8-cec2c75a0935.mp4
+
 ### Auto-generated subtitles for any video
 
 PyAutoSRT is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
