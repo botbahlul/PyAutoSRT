@@ -18,7 +18,7 @@ long_description = (
 
 setup(
     name="pyautosrt",
-    version="0.0.1",
+    version="0.0.3",
     description="pyautosrt is a python based desktop app to generate subtitle and translated subtitle file",
     long_description = long_description,
     author="Bot Bahlul",
@@ -37,6 +37,8 @@ setup(
         "pysrt>=1.0.1",
         "progressbar2>=3.34.3",
         "six>=1.11.0",
+        "tk>=0.1.0",
+        "pysimplegui>=4.60.1",
     ],
     license=open("LICENSE").read()
 )

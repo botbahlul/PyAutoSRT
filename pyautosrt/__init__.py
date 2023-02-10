@@ -767,7 +767,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
-    parser.add_argument('-v', '--version', action='version', version='0.0.1')
+    parser.add_argument('-v', '--version', action='version', version='0.0.3')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/destination languages", action='store_true')
 
