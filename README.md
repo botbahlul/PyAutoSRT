@@ -24,7 +24,7 @@ to install this pyautosrt, just type :
 pip install pyautosrt
 ```
 
-you can compile this script into a single executable file with pyinstaller by downloading __init__.py file, rename it to pyautosrt.py and type :
+you can compile this script into a single executable file with pyinstaller by downloading "__init__.py" file, rename it to pyautosrt.py and type :
 ```
 pip install pyinstaller
 pyinstaller --onefile pyautosrt.py
