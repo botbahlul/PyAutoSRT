@@ -58,6 +58,8 @@ options:
                         List all available source/destination languages
 ```
 
+Those command switch '-S' and '-D' are not mandatory. It's just to make combobox directly select your desired language if you prefer to type it rather that click on combobox.
+
 ### License
 
 MIT
