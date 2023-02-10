@@ -2,7 +2,7 @@
   
 ### Auto-generated subtitles for any video
 
-pyautosrt is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
+PyAutoSRT is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
 
 ### Installation
 
