@@ -18,7 +18,7 @@ except ImportError:
     JSONDecodeError = ValueError
 
 from progressbar import ProgressBar, Percentage, Bar, ETA
-from pygoogletranslation import Translator
+from googletrans import Translator
 import pysrt
 import six
 import ntpath
@@ -599,7 +599,7 @@ class StoppableThread(threading.Thread):
 def transcribe(src, dest, filename, subtitle_format, main_window):
     global thread_transcribe, not_transcribing, canceled, pool, wav_filename, subtitle_file, translated_subtitle_file, subtitle_folder_name, converter, recognizer, extracted_regions, transcriptions
 
-    pool = multiprocessing.pool.ThreadPool(10)
+    pool = multiprocessing.Pool(10)
     wav_filename = None
     subtitle_file = None
     translated_subtitle_file = None
@@ -767,7 +767,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
-    parser.add_argument('-v', '--version', action='version', version='0.0.3')
+    parser.add_argument('-v', '--version', action='version', version='0.0.4')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/destination languages", action='store_true')
 
