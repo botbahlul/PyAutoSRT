@@ -21,7 +21,6 @@ import six
 # ADDTIONAL IMPORTS
 import io
 import time
-import signal
 import threading
 from threading import Timer, Thread
 import PySimpleGUI as sg
@@ -565,22 +564,24 @@ def find_speech_regions(filename, frame_width=4096, min_region_size=0.3, max_reg
     return regions
 
 
-async def GoogleTranslate(text, src, dst):
+def GoogleTranslate(text, src, dst):
     url = 'https://translate.googleapis.com/translate_a/'
     params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url+params)
-        #print('response = {}'.format(response))
-        response_json = response.json()[0]
-        #print('response_json = {}'.format(response_json))
-        length = len(response_json)
-        #print('length = {}'.format(length))
-        translation = ""
-        for i in range(length):
-            #print("{} {}".format(i, response_json[i][0]))
-            translation = translation + response_json[i][0]
-        return translation
-
+    with httpx.Client(http2=True) as client:
+        client.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://translate.google.com',})
+        response = client.get(url+params)
+        #print('response.status_code = {}'.format(response.status_code))
+        if response.status_code == 200:
+            response_json = response.json()[0]
+            #print('response_json = {}'.format(response_json))
+            length = len(response_json)
+            #print('length = {}'.format(length))
+            translation = ""
+            for i in range(length):
+                #print("{} {}".format(i, response_json[i][0]))
+                translation = translation + response_json[i][0]
+            return translation
+        return
 
 class SentenceTranslator(object):
     def __init__(self, src, dest, patience=-1):
@@ -593,7 +594,9 @@ class SentenceTranslator(object):
         # handle the special case: empty string.
         if not sentence:
             return None
-        translated_sentence = asyncio.get_event_loop().run_until_complete(GoogleTranslate(sentence, src=self.src, dst=self.dest)) # using self made GoogleTranslate2()
+
+        translated_sentence = GoogleTranslate(sentence, src=self.src, dst=self.dest)
+
         fail_to_translate = translated_sentence[-1] == '\n'
         while fail_to_translate and patience:
             translated_sentence = translator.translate(translated_sentence, src=self.src, dest=self.dest).text
@@ -607,7 +610,6 @@ class SentenceTranslator(object):
 
 
 def transcribe(src, dest, filename, subtitle_format, main_window):
-    #global thread_transcribe, not_transcribing, pool, wav_filename, subtitle_file, translated_subtitle_file, subtitle_folder_name, converter, recognizer, extracted_regions, transcriptions
     global thread_transcribe, not_transcribing, pool
 
     if not_transcribing: return
