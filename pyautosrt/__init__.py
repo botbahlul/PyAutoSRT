@@ -1,13 +1,13 @@
 #!/usr/bin/env python
+# ORIGINAL AUTOSUB IMPORTS
 from __future__ import absolute_import, print_function, unicode_literals
-
+import argparse
 import audioop
 import math
 import multiprocessing
+import os
 import subprocess
-import threading
-import io, sys, os, time, datetime, signal
-import argparse
+import sys
 import tempfile
 import wave
 import json
@@ -16,20 +16,24 @@ try:
     from json.decoder import JSONDecodeError
 except ImportError:
     JSONDecodeError = ValueError
-
-from progressbar import ProgressBar, Percentage, Bar, ETA
-from googletrans import Translator
 import pysrt
 import six
-import ntpath
-from pathlib import Path
+# ADDTIONAL IMPORTS
+import io
+import time
+import signal
+import threading
 from threading import Timer, Thread
 import PySimpleGUI as sg
-import contextlib
-from contextlib import suppress
+import asyncio
+import httpx
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+sys.tracebacklimit = 0
 
 not_transcribing = True
-canceled = False
 filepath = None
 wav_filename = None
 converter = None
@@ -41,13 +45,11 @@ translated_subtitle_file = None
 pool = None
 all_threads = []
 
-GOOGLE_SPEECH_API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
-GOOGLE_SPEECH_API_URL = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}" # pylint: disable=line-too-long
-DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0 Win64 x64)'
-
 
 #---------------------------------------------------------------CONSTANTS---------------------------------------------------------------#
 
+GOOGLE_SPEECH_API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
+GOOGLE_SPEECH_API_URL = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}" # pylint: disable=line-too-long
 
 arraylist_language_code = []
 arraylist_language_code.append("af")
@@ -330,13 +332,6 @@ arraylist_subtitle_format.append("raw");
 #------------------------------------------------------------MISC FUNCTIONS------------------------------------------------------------#
 
 
-def my_exchandler(type, value, traceback):
-    print("")
-
-
-sys.excepthook = my_exchandler
-
-
 def srt_formatter(subtitles, padding_before=0, padding_after=0):
     """
     Serialize a list of subtitles according to the SRT format, with optional time padding.
@@ -406,12 +401,6 @@ def percentile(arr, percent):
 def is_same_language(lang1, lang2):
     return lang1.split("-")[0] == lang2.split("-")[0]
 
-
-class ThreadWithResult(Thread):
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, *, daemon=None):
-        def function():
-            self.result = target(*args, **kwargs)
-        super().__init__(group=group, target=function, name=name, daemon=daemon)
 
 class FLACConverter(object):
     def __init__(self, source_path, include_before=0.25, include_after=0.25):
@@ -498,22 +487,41 @@ def ffmpeg_check():
     return None
 
 
-def extract_audio(filename, channels=1, rate=16000):
+def extract_audio(filename, main_window, channels=1, rate=16000):
+    global not_transcribing
+
+    if not_transcribing: return
+
     temp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+
     if not os.path.isfile(filename):
         #print("The given file does not exist: {0}".format(filename))
-        raise Exception("Invalid filepath: {0}".format(filename))
+        #raise Exception("Invalid filepath: {0}".format(filename))
+        main_window['-ML1'].update('The given file does not exist: {0}".format(filename)')
+        not_transcribing=True
+        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+
     if not ffmpeg_check():
         #print("ffmpeg: Executable not found on machine.")
-        raise Exception("Dependency not found: ffmpeg")
+        #raise Exception("Dependency not found: ffmpeg")
+        main_window['-ML1'].update('ffmpeg: Executable not found on machine.')
+        not_transcribing=True
+        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+
     command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+
+    if not_transcribing: return
+
     subprocess.check_output(command, stdin=open(os.devnull))
+
     return temp.name, rate
 
 
 #def find_speech_regions(filename, frame_width=4096, min_region_size=0.5, max_region_size=6):
 def find_speech_regions(filename, frame_width=4096, min_region_size=0.3, max_region_size=8):
-    global pool, wav_filename, subtitle_file, translated_subtitle_file, converter, recognizer, extracted_regions, transcriptions
+    global thread_transcribe, not_transcribing, pool
+
+    if not_transcribing: return
 
     reader = wave.open(filename)
     sample_width = reader.getsampwidth()
@@ -524,51 +532,68 @@ def find_speech_regions(filename, frame_width=4096, min_region_size=0.3, max_reg
     chunk_duration = float(frame_width) / rate
     n_chunks = int(total_duration / chunk_duration)
 
-    energies = []
+    if not_transcribing: return
 
+    energies = []
     for i in range(n_chunks):
+
+        if not_transcribing: return
+
         chunk = reader.readframes(frame_width)
         energies.append(audioop.rms(chunk, sample_width * n_channels))
 
     threshold = percentile(energies, 0.2)
-
     elapsed_time = 0
-
     regions = []
     region_start = None
 
     i=0
     for energy in energies:
+
+        if not_transcribing: return
+
         is_silence = energy <= threshold
         max_exceeded = region_start and elapsed_time - region_start >= max_region_size
-
         if (max_exceeded or is_silence) and region_start:
             if elapsed_time - region_start >= min_region_size:
                 regions.append((region_start, elapsed_time))
                 region_start = None
-
         elif (not region_start) and (not is_silence):
             region_start = elapsed_time
         elapsed_time += chunk_duration
         i=i+1
-
     return regions
 
 
-class TranscriptionTranslator(object):
+async def GoogleTranslate(text, src, dst):
+    url = 'https://translate.googleapis.com/translate_a/'
+    params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url+params)
+        #print('response = {}'.format(response))
+        response_json = response.json()[0]
+        #print('response_json = {}'.format(response_json))
+        length = len(response_json)
+        #print('length = {}'.format(length))
+        translation = ""
+        for i in range(length):
+            #print("{} {}".format(i, response_json[i][0]))
+            translation = translation + response_json[i][0]
+        return translation
+
+
+class SentenceTranslator(object):
     def __init__(self, src, dest, patience=-1):
         self.src = src
         self.dest = dest
         self.patience = patience
 
     def __call__(self, sentence):
-        translator = Translator()
         translated_sentence = []
-
         # handle the special case: empty string.
         if not sentence:
             return None
-        translated_sentence = translator.translate(sentence, src=self.src, dest=self.dest).text
+        translated_sentence = asyncio.get_event_loop().run_until_complete(GoogleTranslate(sentence, src=self.src, dst=self.dest)) # using self made GoogleTranslate2()
         fail_to_translate = translated_sentence[-1] == '\n'
         while fail_to_translate and patience:
             translated_sentence = translator.translate(translated_sentence, src=self.src, dest=self.dest).text
@@ -581,100 +606,136 @@ class TranscriptionTranslator(object):
         return translated_sentence
 
 
-class StoppableThread(threading.Thread):
-    """Thread class with a stop() method. The thread itself has to check
-    regularly for the stopped() condition."""
-
-    def __init__(self,  *args, **kwargs):
-        super(StoppableThread, self).__init__(*args, **kwargs)
-        self._stop_event = threading.Event()
-
-    def stop(self):
-        self._stop_event.set()
-
-    def stopped(self):
-        return self._stop_event.is_set()
-
-
 def transcribe(src, dest, filename, subtitle_format, main_window):
-    global thread_transcribe, not_transcribing, canceled, pool, wav_filename, subtitle_file, translated_subtitle_file, subtitle_folder_name, converter, recognizer, extracted_regions, transcriptions
+    #global thread_transcribe, not_transcribing, pool, wav_filename, subtitle_file, translated_subtitle_file, subtitle_folder_name, converter, recognizer, extracted_regions, transcriptions
+    global thread_transcribe, not_transcribing, pool
+
+    if not_transcribing: return
 
     pool = multiprocessing.Pool(10)
     wav_filename = None
+    audio_rate = None
     subtitle_file = None
     translated_subtitle_file = None
     file_display_name = os.path.basename(filename).split('/')[-1]
     regions = None
 
-    with contextlib.suppress(Exception):
-        main_window['-ML1-'].update("")
-        main_window['-ML1-'].update("Converting {} to a temporary WAV file\n".format(file_display_name), append=True)
-        wav_filename, audio_rate = extract_audio(filename)
-        main_window['-ML1-'].update("Converted WAV file is : {}\n\n".format(wav_filename), append=True)
-        time.sleep(2)
+    if not_transcribing: return
 
-    with contextlib.suppress(Exception):
-        main_window['-ML1-'].update("Finding speech regions of WAV file\n", append=True)
-        regions = find_speech_regions(wav_filename)
-        num = len(regions)
-        main_window['-ML1-'].update("Speech regions found = {}\n\n".format(len(regions)) , append=True)
-        time.sleep(2)
+    main_window['-ML1-'].update("")
+    main_window['-ML1-'].update("Converting {} to a temporary WAV file\n".format(file_display_name), append=True)
+    wav_filename, audio_rate = extract_audio(filename, main_window)
+    main_window['-ML1-'].update("Converted WAV file is : {}\n\n".format(wav_filename), append=True)
+    time.sleep(2)
+
+    if not_transcribing: return
+
+    main_window['-ML1-'].update("Finding speech regions of WAV file\n", append=True)
+    regions = find_speech_regions(wav_filename)
+    num = len(regions)
+    main_window['-ML1-'].update("Speech regions found = {}\n\n".format(len(regions)) , append=True)
+    time.sleep(2)
+
+    if not_transcribing: return
 
     converter = FLACConverter(source_path=wav_filename)
     recognizer = SpeechRecognizer(language=src, rate=audio_rate, api_key=GOOGLE_SPEECH_API_KEY)
     transcriptions = []
     translated_transcriptions = []
 
+    if not_transcribing: return
+
     if regions:
-        with contextlib.suppress(Exception):
-            extracted_regions = []
-            for i, extracted_region in enumerate(pool.imap(converter, regions)):
-                extracted_regions.append(extracted_region)
-                pBar(i, len(regions), 'Converting speech regions to FLAC files : ', main_window)
-            pBar(len(regions), len(regions), 'Converting speech regions to FLAC files : ', main_window)
+        extracted_regions = []
+        for i, extracted_region in enumerate(pool.imap(converter, regions)):
+            if not_transcribing:
+                pool.close()
+                pool.join()
+                pool = None
+                return
+            extracted_regions.append(extracted_region)
+            pBar(i, len(regions), 'Converting speech regions to FLAC files : ', main_window)
+        pBar(len(regions), len(regions), 'Converting speech regions to FLAC files : ', main_window)
         
-            for i, transcription in enumerate(pool.imap(recognizer, extracted_regions)):
-                transcriptions.append(transcription)
-                pBar(i, len(regions), 'Creating transcriptions                 : ', main_window)
-            pBar(len(regions), len(regions), 'Creating transcriptions                 : ', main_window)
+        if not_transcribing: return
+
+        for i, transcription in enumerate(pool.imap(recognizer, extracted_regions)):
+            if not_transcribing:
+                pool.close()
+                pool.join()
+                pool = None
+                return
+            transcriptions.append(transcription)
+            pBar(i, len(regions), 'Creating transcriptions             : ', main_window)
+        pBar(len(regions), len(regions), 'Creating transcriptions             : ', main_window)
  
-            timed_subtitles = [(r, t) for r, t in zip(regions, transcriptions) if t]
+        if not_transcribing: return
+
+        timed_subtitles = [(r, t) for r, t in zip(regions, transcriptions) if t]
+        formatter = FORMATTERS.get(subtitle_format)
+        formatted_subtitles = formatter(timed_subtitles)
+
+        base, ext = os.path.splitext(filename)
+        subtitle_file = "{base}.{format}".format(base=base, format=subtitle_format)
+
+        if not_transcribing: return
+
+        with open(subtitle_file, 'wb') as f:
+            f.write(formatted_subtitles.encode("utf-8"))
+            f.close()
+
+        with open(subtitle_file, 'a') as f:
+            f.write("\n")
+            f.close()
+
+        if not_transcribing: return
+
+        if (not is_same_language(src, dest)):
+            translated_subtitle_file = subtitle_file[ :-4] + '.translated.' + subtitle_format
+
+            if not_transcribing: return
+
+            created_regions = []
+            created_transcripts = []
+            for entry in timed_subtitles:
+                created_regions.append(entry[0])
+                created_transcripts.append(entry[1])
+
+            if not_transcribing: return
+
+            transcript_translator = SentenceTranslator(src=src, dest=dest)
+            translated_transcriptions = []
+            for i, translated_transcription in enumerate(pool.imap(transcript_translator, created_transcripts)):
+                if not_transcribing:
+                    pool.close()
+                    pool.join()
+                    pool = None
+                    return
+                translated_transcriptions.append(translated_transcription)
+                pBar(i, len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
+            pBar(len(timed_subtitles), len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
+
+            if not_transcribing: return
+
+            timed_translated_subtitles = [(r, t) for r, t in zip(created_regions, translated_transcriptions) if t]
             formatter = FORMATTERS.get(subtitle_format)
-            formatted_subtitles = formatter(timed_subtitles)
+            formatted_translated_subtitles = formatter(timed_translated_subtitles)
 
-            base, ext = os.path.splitext(filename)
-            subtitle_file = "{base}.{format}".format(base=base, format=subtitle_format)
+            if not_transcribing: return
 
-            with open(subtitle_file, 'wb') as f:
-                f.write(formatted_subtitles.encode("utf-8"))
-                f.close()
-
-            with open(subtitle_file, 'a') as f:
+            with open(translated_subtitle_file, 'wb') as f:
+                f.write(formatted_translated_subtitles.encode("utf-8"))
+            with open(translated_subtitle_file, 'a') as f:
                 f.write("\n")
-                f.close()
 
-            if (not is_same_language(src, dest)):
-                translated_subtitle_file = subtitle_file[ :-4] + '_translated.' + subtitle_format
-                transcript_translator = TranscriptionTranslator(src=src, dest=dest)
-                translated_transcriptions = []
-                for i, translated_transcription in enumerate(pool.imap(transcript_translator, transcriptions)):
-                    translated_transcriptions.append(translated_transcription)
-                    pBar(i, len(transcriptions), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
-                pBar(len(transcriptions), len(transcriptions), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
+            if not_transcribing: return
 
-                timed_translated_subtitles = [(r, t) for r, t in zip(regions, translated_transcriptions) if t]
-                formatter = FORMATTERS.get(subtitle_format)
-                formatted_translated_subtitles = formatter(timed_translated_subtitles)
+        main_window['-ML1-'].update('\n\nDone.\n\n', append = True)
+        main_window['-ML1-'].update("Subtitles file created at            : {}\n".format(subtitle_file), append = True)
+        if (not is_same_language(src, dest)):
+            main_window['-ML1-'].update("\nTranslated subtitles file created at : {}\n" .format(translated_subtitle_file), append = True)
 
-                with open(translated_subtitle_file, 'wb') as f:
-                    f.write(formatted_translated_subtitles.encode("utf-8"))
-                with open(translated_subtitle_file, 'a') as f:
-                    f.write("\n")
-
-            main_window['-ML1-'].update('\n\nDone.\n\n', append = True)
-            main_window['-ML1-'].update("Subtitles file created at               : {}\n".format(subtitle_file), append = True)
-            if (not is_same_language(src, dest)):
-                main_window['-ML1-'].update("\nTranslated subtitles file created at    : {}\n" .format(translated_subtitle_file), append = True)
+        if not_transcribing: return
 
     pool.close()
     pool.join()
@@ -686,15 +747,6 @@ def transcribe(src, dest, filename, subtitle_format, main_window):
     return subtitle_file
 
 
-def progressbar(count_value, total, prefix='', suffix=''):
-    bar_length = 50
-    filled_up_Length = int(round(bar_length* count_value / float(total)))
-    percentage = round(100.0 * count_value/float(total),1)
-    bar = '#' * filled_up_Length + '-' * (bar_length - filled_up_Length)
-    sys.stdout.write('%s [%s] %s%s %s\r' %(prefix, bar, percentage, '%', suffix))
-    sys.stdout.flush()
-
-
 def pBar(count_value, total, prefix, main_window):
     bar_length = 10
     filled_up_Length = int(round(bar_length*count_value/(total)))
@@ -704,57 +756,12 @@ def pBar(count_value, total, prefix, main_window):
     main_window['-ML1-'].update(text, append = False)
 
 
-def check_cancel_status(main_window):
-    global not_transcribing, canceled, pool, wav_filename, subtitle_file, translated_subtitle_file, subtitle_folder_name, converter, recognizer, extracted_regions, transcriptions
-
-    while True:
-        if canceled:
-            main_window['-ML1-'].print("")
-            main_window['-ML1-'].print("Canceling all tasks")
-            if pool:
-                pool.terminate()
-                pool.close()
-            break
-    return
-
-def signal_handle(_signal, frame):
-    print("Stopping the Jobs.")
-
-def check_stop_signal():
-    global stop_event
-    """
-    Checks continuously (every 0.1 s) if a "stop" flag has been set in the database.
-    Needs to run in its own thread.
-    """
-    while True:
-        if io.check_stop():
-            print("Program was aborted by user.")
-            print("Setting threading stop event...")
-            stop_event.set()
-            break
-        sleep(0.1)
-
-
-#-------------------------------------------------------------GUI FUNCTIONS-------------------------------------------------------------#
-
-def steal_focus():
-    global main_window
-
-    if(sys.platform == "win32"):
-        main_window.TKroot.attributes('-topmost', True)
-        main_window.TKroot.attributes('-topmost', False)
-        main_window.TKroot.deiconify()
-    if(sys.platform == "linux"):
-        main_window.TKroot.attributes('-topmost', 1)
-        main_window.TKroot.attributes('-topmost', 0)
-        main_window.BringToFront()
-
-
-def font_length(Text, Font, Size) :
-    f = tf.Font(family=Font , size = Size)
-    length = f.measure(Text)
-    #print(length)
-    return length
+def popup_yes_no(text, title=None):
+    layout = [
+        [sg.Text(text)],
+        [sg.Push(), sg.Button('Yes'), sg.Button('No')],
+    ]
+    return sg.Window(title if title else text, layout, resizable=True).read(close=True)
 
 
 
@@ -762,12 +769,14 @@ def font_length(Text, Font, Size) :
 
 
 def main():
-    global process_transcribe, thread_transcribe, not_transcribing, canceled, stop_event
+    global thread_transcribe, not_transcribing, pool
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('source_path', help="Path to the video or audio file to subtitle", nargs='?')
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
-    parser.add_argument('-v', '--version', action='version', version='0.0.4')
+    parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
+    parser.add_argument('-v', '--version', action='version', version='0.0.5')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/destination languages", action='store_true')
 
@@ -847,6 +856,24 @@ def main():
 
     not_transcribing = True
 
+    if args.source_path:
+        if not os.sep in args.source_path:
+            filepath = os.path.join(os.getcwd(),args.source_path)
+        else:
+            filepath = args.source_path
+        if os.path.isfile(filepath):
+            main_window['-FILEPATH-'].update(filepath)
+        else:
+            main_window['-FILEPATH-'].update('')
+            main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
+
+    if args.format not in FORMATTERS.keys():
+        main_window['-ML1-'].update("Subtitle format you typed is not supported, select one from combobox", append=True)
+    else:
+        subtitle_format = args.format
+        main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
+
+
     if  (sys.platform == "win32"):
         main_window.TKroot.attributes('-topmost', True)
         main_window.TKroot.attributes('-topmost', False)
@@ -856,15 +883,18 @@ def main():
         main_window.TKroot.attributes('-topmost', 0)
 
 
-
 #---------------------------------------------------------------MAIN LOOP--------------------------------------------------------------#
 
     while True:
-        #window, event, values = sg.read_all_windows()
         event, values = main_window.read()
 
         if (event == 'Exit') or (event == sg.WIN_CLOSED):
-            break
+            if not not_transcribing:
+                answer = popup_yes_no('             Are you sure?              ', title='Confirm')
+                if 'Yes' in answer:
+                    break
+            else:
+                break
 
         elif event == '-SRC-':
             src = map_code_of_language[str(main_window['-SRC-'].get())]
@@ -882,24 +912,23 @@ def main():
 
             if filepath and src and dst and subtitle_format:
                 not_transcribing = not not_transcribing
+
                 if not not_transcribing:
                     main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-                    sys.tracebacklimit = 0
-                    with contextlib.suppress(Exception):
-                        thread_transcribe = StoppableThread(target=transcribe, args=(src, dst, filepath, subtitle_format, main_window), daemon=True)
-                        thread_transcribe.start()
-                        all_threads.append(thread_transcribe)
+                    thread_transcribe = Thread(target=transcribe, args=(src, dst, filepath, subtitle_format, main_window), daemon=True)
+                    thread_transcribe.start()
+                    all_threads.append(thread_transcribe)
 
                 else:
-                    canceled = True
-                    not_transcribing = True
-                    main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-                    sys.tracebacklimit = 0
-                    with contextlib.suppress(Exception):
+                    not_transcribing = not not_transcribing
+                    answer = popup_yes_no('             Are you sure?              ', title='Confirm')
+                    if 'Yes' in answer:
+                        not_transcribing = True
+                        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
                         for t in all_threads:
                             t.join()
-                    main_window['-ML1-'].update("", append=False)
-                    main_window['-ML1-'].update("All tasks has been canceled", append=False)
+                        main_window['-ML1-'].update("", append=False)
+                        main_window['-ML1-'].update("All tasks has been canceled", append=False)
 
             else:
                 main_window['-ML1-'].update("You should pick a file first")
