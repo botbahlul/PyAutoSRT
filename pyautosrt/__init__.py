@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # ORIGINAL AUTOSUB IMPORTS
 from __future__ import absolute_import, print_function, unicode_literals
 import argparse
@@ -26,9 +25,6 @@ from threading import Timer, Thread
 import PySimpleGUI as sg
 import asyncio
 import httpx
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 sys.tracebacklimit = 0
 
@@ -583,10 +579,11 @@ def GoogleTranslate(text, src, dst):
             return translation
         return
 
+
 class SentenceTranslator(object):
-    def __init__(self, src, dest, patience=-1):
+    def __init__(self, src, dst, patience=-1):
         self.src = src
-        self.dest = dest
+        self.dst = dst
         self.patience = patience
 
     def __call__(self, sentence):
@@ -595,11 +592,11 @@ class SentenceTranslator(object):
         if not sentence:
             return None
 
-        translated_sentence = GoogleTranslate(sentence, src=self.src, dst=self.dest)
+        translated_sentence = GoogleTranslate(sentence, src=self.src, dst=self.dst)
 
         fail_to_translate = translated_sentence[-1] == '\n'
         while fail_to_translate and patience:
-            translated_sentence = translator.translate(translated_sentence, src=self.src, dest=self.dest).text
+            translated_sentence = translator.translate(translated_sentence, src=self.src, dst=self.dst).text
             if translated_sentence[-1] == '\n':
                 if patience == -1:
                     continue
@@ -609,7 +606,7 @@ class SentenceTranslator(object):
         return translated_sentence
 
 
-def transcribe(src, dest, filename, subtitle_format, main_window):
+def transcribe(src, dst, filename, subtitle_format, main_window):
     global thread_transcribe, not_transcribing, pool
 
     if not_transcribing: return
@@ -692,7 +689,7 @@ def transcribe(src, dest, filename, subtitle_format, main_window):
 
         if not_transcribing: return
 
-        if (not is_same_language(src, dest)):
+        if (not is_same_language(src, dst)):
             translated_subtitle_file = subtitle_file[ :-4] + '.translated.' + subtitle_format
 
             if not_transcribing: return
@@ -705,7 +702,7 @@ def transcribe(src, dest, filename, subtitle_format, main_window):
 
             if not_transcribing: return
 
-            transcript_translator = SentenceTranslator(src=src, dest=dest)
+            transcript_translator = SentenceTranslator(src=src, dst=dst)
             translated_transcriptions = []
             for i, translated_transcription in enumerate(pool.imap(transcript_translator, created_transcripts)):
                 if not_transcribing:
@@ -714,8 +711,8 @@ def transcribe(src, dest, filename, subtitle_format, main_window):
                     pool = None
                     return
                 translated_transcriptions.append(translated_transcription)
-                pBar(i, len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
-            pBar(len(timed_subtitles), len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dest), main_window)
+                pBar(i, len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dst), main_window)
+            pBar(len(timed_subtitles), len(timed_subtitles), 'Translating from %5s to %5s         : ' %(src, dst), main_window)
 
             if not_transcribing: return
 
@@ -734,7 +731,7 @@ def transcribe(src, dest, filename, subtitle_format, main_window):
 
         main_window['-ML1-'].update('\n\nDone.\n\n', append = True)
         main_window['-ML1-'].update("Subtitles file created at            : {}\n".format(subtitle_file), append = True)
-        if (not is_same_language(src, dest)):
+        if (not is_same_language(src, dst)):
             main_window['-ML1-'].update("\nTranslated subtitles file created at : {}\n" .format(translated_subtitle_file), append = True)
 
         if not_transcribing: return
@@ -766,7 +763,6 @@ def popup_yes_no(text, title=None):
     return sg.Window(title if title else text, layout, resizable=True).read(close=True)
 
 
-
 #--------------------------------------------------------------MAIN FUNCTIONS------------------------------------------------------------#
 
 
@@ -778,38 +774,17 @@ def main():
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.0.5')
+    parser.add_argument('-v', '--version', action='version', version='0.0.7')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-ll', '--list-languages', help="List all available source/destination languages", action='store_true')
+    parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
     args = parser.parse_args()
-
-    if args.src_language not in map_language_of_code.keys():
-        print("Source language not supported. Run with --list-languages to see all supported languages.")
-        sys.exit(0)
-
-    if args.dst_language not in map_language_of_code.keys():
-        print("Destination language not supported. Run with --list-languages to see all supported languages.")
-        sys.exit(0)
-
-    if not args.src_language:
-        src = "en"
-
-    if args.src_language:
-        src = args.src_language
-
-    if args.dst_language:
-        dest = args.dst_language
-
-    if not args.dst_language:
-        dst = "en"
-
 
     if args.list_formats:
         print("List of formats:")
         for subtitle_format in FORMATTERS.keys():
             print("{format}".format(format=subtitle_format))
-        return 0
+        sys.exit(0)
 
     if args.list_languages:
         print("List of all languages:")
@@ -820,6 +795,11 @@ def main():
 
 #--------------------------------------------------------------MAIN WINDOW--------------------------------------------------------------#
 
+    not_transcribing = True
+    filepath = None
+    src = None
+    dst = None
+    subtitle_format = None
 
     xmax,ymax=sg.Window.get_screen_size()
     wsizex=int(0.6*xmax)
@@ -829,26 +809,17 @@ def main():
     wx=int((xmax-wsizex)/2)
     wy=int((ymax-wsizey)/2)
 
-    if not src==None:
-        combo_src=map_language_of_code[src]
-    else:
-        combo_src='Indonesian'
-    if not dest==None:
-        combo_dest=map_language_of_code[dest]
-    else:
-        combo_dest='English'
-
     #sg.set_options(font=('Courier New', 10))
     #sg.set_options(font=('Monospaced', 9))
     font=('Consolas', 9)
 
     layout = [[sg.Text('Voice language       :'),
-               sg.Combo(list(map_code_of_language), default_value=combo_src, enable_events=True, key='-SRC-')],
+               sg.Combo(list(map_code_of_language), default_value='English', enable_events=True, key='-SRC-')],
               [sg.Text('Translation language :'),
-               sg.Combo(list(map_code_of_language), default_value=combo_dest, enable_events=True, key='-DST-')],
+               sg.Combo(list(map_code_of_language), default_value='Indonesian', enable_events=True, key='-DST-')],
               [sg.Text('Subtitle format      :'),
                sg.Combo(list(arraylist_subtitle_format), default_value='srt', enable_events=True, key='-SUBTITLE-FORMAT-')],
-              [sg.Text('Filepath             :',), sg.InputText(key='-FILEPATH-', expand_x=True, expand_y=True), sg.FileBrowse()],
+              [sg.Text('Filepath             :',), sg.InputText(key='-FILEPATH-', expand_x=True, expand_y=True, enable_events=True), sg.FileBrowse()],
               [sg.Button('Start', expand_x=True, expand_y=True, key='-START-')],
               [sg.Multiline(size=(mlszx, mlszy), expand_x=True, expand_y=True, key='-ML1-')],
               [sg.Button('Exit', expand_x=True, expand_y=True)]]
@@ -856,24 +827,57 @@ def main():
     main_window = sg.Window('PyAutoSRT', layout, font=font, resizable=True, keep_on_top=True, finalize=True)
     main_window['-SRC-'].block_focus()
 
-    not_transcribing = True
-
     if args.source_path:
         if not os.sep in args.source_path:
-            filepath = os.path.join(os.getcwd(),args.source_path)
+            if os.path.isfile(args.source_path):
+                filepath = os.path.join(os.getcwd(),args.source_path)
+                main_window['-FILEPATH-'].update(filepath)
+            else:
+                filepath = None
+                main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
         else:
-            filepath = args.source_path
-        if os.path.isfile(filepath):
-            main_window['-FILEPATH-'].update(filepath)
-        else:
-            main_window['-FILEPATH-'].update('')
-            main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
+            if os.path.isfile(args.source_path):
+                filepath = args.source_path
+                main_window['-FILEPATH-'].update(filepath)
+            else:
+                filepath = None
+                main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
 
-    if args.format not in FORMATTERS.keys():
-        main_window['-ML1-'].update("Subtitle format you typed is not supported, select one from combobox", append=True)
-    else:
-        subtitle_format = args.format
+
+    if args.src_language:
+        if args.src_language not in map_language_of_code.keys():
+            main_window['-ML1-'].update('Source language you typed is not supported\nPlease select one from combobox\n\n', append=True)
+        elif args.src_language in map_language_of_code.keys():
+            src = args.src_language
+            main_window['-SRC-'].update(map_language_of_code[src])
+            
+    if not args.src_language:
+        src = 'en'
+        main_window['-SRC-'].update(map_language_of_code[src])
+
+
+    if args.dst_language:
+        if args.dst_language not in map_language_of_code.keys():
+            main_window['-ML1-'].update('Translation language you typed is not supported\nPlease select one from combobox\n\n', append=True)
+        elif args.dst_language in map_language_of_code.keys():
+            dst = args.dst_language
+            main_window['-DST-'].update(map_language_of_code[dst])
+
+    if not args.dst_language:
+        dst = "id"
+        main_window['-DST-'].update(map_language_of_code[dst])
+
+    if args.format:
+        if args.format not in FORMATTERS.keys():
+            main_window['-ML1-'].update('Subtitle format you typed is not supported\nPlease select one from combobox', append=True)
+        else:
+            subtitle_format = args.format
+            main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
+
+    if not args.format:
+        subtitle_format = 'srt'
         main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
+
 
 
     if  (sys.platform == "win32"):
@@ -885,7 +889,9 @@ def main():
         main_window.TKroot.attributes('-topmost', 0)
 
 
+
 #---------------------------------------------------------------MAIN LOOP--------------------------------------------------------------#
+
 
     while True:
         event, values = main_window.read()
@@ -897,6 +903,10 @@ def main():
                     break
             else:
                 break
+
+        elif event == '-FILEPATH-':
+            if not values['-FILEPATH-']=='' and os.path.isfile(values['-FILEPATH-']):
+                main_window['-ML1-'].update('')
 
         elif event == '-SRC-':
             src = map_code_of_language[str(main_window['-SRC-'].get())]
@@ -942,4 +952,3 @@ def main():
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     main()
-
