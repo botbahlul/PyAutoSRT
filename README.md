@@ -10,6 +10,9 @@ https://user-images.githubusercontent.com/88623122/218178963-fb77891c-1845-4514-
 
 PyAutoSRT is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
 
+The core script is a modified version of original autosub made by Anastasis Germanidis
+https://github.com/agermanidis/autosub
+
 ### Installation
 
 If you don't have python on your Windows system you can get compiled version from https://github.com/botbahlul/pyautosrt/releases/
