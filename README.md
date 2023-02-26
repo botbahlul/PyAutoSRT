@@ -6,7 +6,7 @@ https://user-images.githubusercontent.com/88623122/218178963-fb77891c-1845-4514-
 
 
 
-### Auto-generated subtitles for any video
+### Auto-generated subtitles files for any video/audio files
 
 PyAutoSRT is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
 
@@ -53,7 +53,10 @@ python setup.py install
 ### Usage 
 
 ```
-usage: pyautosrt.py [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-v] [-lf] [-ll]
+usage: pyautosrt [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-F FORMAT] [-v] [-lf] [-ll] [source_path ...]
+
+positional arguments:
+  source_path           Path to the video or audio files to generate subtitle (use wildcard for multiple files)
 
 options:
   -h, --help            show this help message and exit
@@ -61,13 +64,17 @@ options:
                         Voice language
   -D DST_LANGUAGE, --dst-language DST_LANGUAGE
                         Desired language for translation
+  -F FORMAT, --format FORMAT
+                        Destination subtitle format
   -v, --version         show program's version number and exit
   -lf, --list-formats   List all available subtitle formats
   -ll, --list-languages
-                        List all available source/destination languages
+                        List all available source/translation languages
 ```
 
 Those command switch '-S' and '-D' are not mandatory. It's just to make combobox directly select your desired language if you prefer to type it rather that click on combobox.
+
+UPDATE NOTES : SINCE VERSION 0.1.0 YOU CAN SELECT MULTIPLE VIDEO/AUDIO FILES, BUT REMEMBER THAT ALL FILES YOU SELECT SHOULD HAVE SAME AUDIO LANGUAGE AND DESIRED TRANSLATION LANGUAGE.
 
 ### License
 
