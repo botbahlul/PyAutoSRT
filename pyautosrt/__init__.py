@@ -23,7 +23,6 @@ import time
 import threading
 from threading import Timer, Thread
 import PySimpleGUI as sg
-import asyncio
 import httpx
 from glob import glob
 #import warnings
@@ -789,7 +788,7 @@ def main():
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.1.0')
+    parser.add_argument('-v', '--version', action='version', version='0.1.1')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
@@ -918,16 +917,6 @@ def main():
                     break
             else:
                 break
-
-        elif event == '-INPUT-':
-            if values[0]:
-                filelist += values[0].split(';')
-                for file in filelist:
-                    if os.path.isfile(file):
-                        filepath = os.path.join(os.getcwd(), file)
-                    else:
-                        filepath = None
-                        main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n\n')
 
         elif event == '-SRC-':
             src = map_code_of_language[str(main_window['-SRC-'].get())]
