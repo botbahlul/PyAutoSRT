@@ -765,7 +765,7 @@ def pBar(count_value, total, prefix, main_window):
     filled_up_Length = int(round(bar_length*count_value/(total)))
     percentage = round(100.0 * count_value/(total),1)
     bar = '#' * filled_up_Length + '=' * (bar_length - filled_up_Length)
-    text = str('%s [%s] %s%s\r' %(prefix, bar, int(percentage), '%'))
+    text = str('%s[%s] %s%s\r' %(prefix, bar, int(percentage), '%'))
     main_window['-OUTPUT-MESSAGES-'].update(text, append = False)
 
 
@@ -788,7 +788,7 @@ def main():
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.1.1')
+    parser.add_argument('-v', '--version', action='version', version='0.1.2')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
@@ -929,8 +929,12 @@ def main():
         elif event == '-START-':
             src = map_code_of_language[str(main_window['-SRC-'].get())]
             dst = map_code_of_language[str(main_window['-DST-'].get())]
+            filelist = []
             filelist += values[0].split(';')
             subtitle_format = values['-SUBTITLE-FORMAT-']
+            thread_transcribe = None
+            all_threads = []
+            main_window['-RESULTS-'].update('', append=False)
 
             if filelist and src and dst and subtitle_format:
                 not_transcribing = not not_transcribing
