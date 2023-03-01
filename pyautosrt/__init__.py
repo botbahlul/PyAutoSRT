@@ -747,25 +747,36 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
 
         if not_transcribing: return
 
-    for t in all_threads:
-        if t.is_alive():
-            all_tasks_completed = False
-        else:
-            all_tasks_completed = True
-            pool.close()
-            pool.join()
-            pool = None
-            os.remove(wav_filename)
-            not_transcribing = True
-            main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+    if len(all_threads) > 1:
+        for t in all_threads:
+            if t.is_alive():
+                all_tasks_completed = False
+            else:
+                all_tasks_completed = True
+                pool.close()
+                pool.join()
+                pool = None
+                t.join()
+                os.remove(wav_filename)
+                not_transcribing = True
+                main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+    else:
+        pool.close()
+        pool.join()
+        pool = None
+        os.remove(wav_filename)
+        not_transcribing = True
+        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
 
 
 def pBar(count_value, total, prefix, main_window):
     bar_length = 10
     filled_up_Length = int(round(bar_length*count_value/(total)))
     percentage = round(100.0 * count_value/(total),1)
-    bar = '#' * filled_up_Length + '=' * (bar_length - filled_up_Length)
-    text = str('%s[%s] %s%s\r' %(prefix, bar, int(percentage), '%'))
+    #bar = '#' * filled_up_Length + '=' * (bar_length - filled_up_Length)
+    bar = '█' * filled_up_Length + '-' * (bar_length - filled_up_Length)
+    #text = str('%s[%s] %s%s\r' %(prefix, bar, int(percentage), '%'))
+    text = str('%s|%s| %s%s\r' %(prefix, bar, int(percentage), '%'))
     main_window['-OUTPUT-MESSAGES-'].update(text, append = False)
 
 
@@ -788,7 +799,7 @@ def main():
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.1.2')
+    parser.add_argument('-v', '--version', action='version', version='0.1.3')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
