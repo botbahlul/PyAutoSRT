@@ -25,6 +25,7 @@ from threading import Timer, Thread
 import PySimpleGUI as sg
 import httpx
 from glob import glob
+from ffmpeg_progress_yield import FfmpegProgress
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
 #warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -507,6 +508,12 @@ def extract_audio(filename, main_window, channels=1, rate=16000):
         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
 
     command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+    ff = FfmpegProgress(command)
+    file_display_name = os.path.basename(filename).split('/')[-1]
+    for progress in ff.run_command_with_progress():
+        pBar(progress, 100, 'Converting {} to a temporary WAV file : '.format(file_display_name), main_window)
+    pBar(100, 100, 'Converting {} to a temporary WAV file : '.format(file_display_name), main_window)
+    #main_window['-OUTPUT-MESSAGES-'].update("\n")
 
     if not_transcribing: return
 
@@ -627,9 +634,9 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
     main_window['-OUTPUT-MESSAGES-'].update("")
     string_processing = "Processing {} :\n".format(file_display_name)
     main_window['-OUTPUT-MESSAGES-'].update(string_processing, append=True)
-    main_window['-OUTPUT-MESSAGES-'].update("Converting {} to a temporary WAV file\n".format(file_display_name), append=True)
+    #main_window['-OUTPUT-MESSAGES-'].update("Converting {} to a temporary WAV file\n".format(file_display_name), append=True)
     wav_filename, audio_rate = extract_audio(filename, main_window)
-    main_window['-OUTPUT-MESSAGES-'].update("{} converted WAV file is : {}\n".format(file_display_name, wav_filename), append=True)
+    main_window['-OUTPUT-MESSAGES-'].update("\n{} converted WAV file is : {}\n".format(file_display_name, wav_filename), append=True)
     time.sleep(2)
 
     if not_transcribing: return
@@ -799,7 +806,7 @@ def main():
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.1.3')
+    parser.add_argument('-v', '--version', action='version', version='0.1.4')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
