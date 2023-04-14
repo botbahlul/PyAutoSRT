@@ -668,7 +668,7 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
             extracted_regions.append(extracted_region)
             pBar(i, len(regions), 'Converting {} speech regions to FLAC files : '.format(file_display_name), main_window)
         pBar(len(regions), len(regions), 'Converting {} speech regions to FLAC files : '.format(file_display_name), main_window)
-        
+
         if not_transcribing: return
 
         for i, transcription in enumerate(pool.imap(recognizer, extracted_regions)):
@@ -680,7 +680,7 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
             transcriptions.append(transcription)
             pBar(i, len(regions), 'Creating {} transcriptions : '.format(file_display_name), main_window)
         pBar(len(regions), len(regions), 'Creating {} transcriptions : '.format(file_display_name), main_window)
- 
+
         if not_transcribing: return
 
         timed_subtitles = [(r, t) for r, t in zip(regions, transcriptions) if t]
@@ -725,9 +725,7 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
                     pool = None
                     return
                 translated_transcriptions.append(translated_transcription)
-                #pBar(i, len(timed_subtitles), 'Translating %12s from %5s to %5s         : ' %(file_display_name, src, dst), main_window)
                 pBar(i, len(timed_subtitles), 'Translating {} subtitles from {} to {} : '.format(file_display_name, src, dst), main_window)
-            #pBar(len(timed_subtitles), len(timed_subtitles), 'Translating %12s from %5s to %5s         : ' %(file_display_name, src, dst), main_window)
             pBar(len(timed_subtitles), len(timed_subtitles), 'Translating {} subtitles from {} to {} : '.format(file_display_name, src, dst), main_window)
 
             if not_transcribing: return
@@ -795,6 +793,19 @@ def popup_yes_no(text, title=None):
     return sg.Window(title if title else text, layout, resizable=True).read(close=True)
 
 
+def make_progress_bar_window(total, info):
+    FONT_TYPE = "Arial"
+    FONT_SIZE = 9
+    sg.set_options(font=(FONT_TYPE, FONT_SIZE))
+
+    layout = [[sg.Text(info, key='-INFO-')],
+              [sg.ProgressBar(total, orientation='h', size=(30, 10), key='-PROGRESS-'), sg.Text(size=(5,1), key='-PERCENTAGE-')]]
+
+    window = sg.Window("Progress", layout, no_titlebar=False, finalize=True)
+
+    return window
+
+
 #--------------------------------------------------------------MAIN FUNCTIONS------------------------------------------------------------#
 
 
@@ -802,11 +813,11 @@ def main():
     global all_threads, thread_transcribe, not_transcribing, pool
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('source_path', help="Path to the video or audio files to generate subtitle (use wildcard for multiple files)", nargs='*')
+    parser.add_argument('source_path', help="Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with space eg. \"file 1.mp4\" \"file 2.mp4\")", nargs='*', default='')
     parser.add_argument('-S', '--src-language', help="Voice language", default="en")
     parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="en")
     parser.add_argument('-F', '--format', help="Destination subtitle format", default="srt")
-    parser.add_argument('-v', '--version', action='version', version='0.1.4')
+    parser.add_argument('-v', '--version', action='version', version='0.1.5')
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
 
@@ -865,18 +876,32 @@ def main():
     main_window.TKroot.option_add("*Font", font)
 
     if args.source_path:
-        for arg in args.source_path:
-            filelist += glob(arg)
-        for file in filelist:
-            if os.path.isfile(file):
-                filepath = os.path.join(os.getcwd(), file)
-                input_string = input_string + filepath + ";"
-                main_window['-INPUT-'].update(input_string)
+        if "*" in str(args.source_path) or len(args.source_path)>1:
+            for arg in args.source_path:
+                filelist += glob(arg)
+            for file in filelist:
+                if os.path.isfile(file):
+                    filepath = os.path.join(os.getcwd(), file)
+                    input_string = input_string + filepath + ";"
+                    main_window['-INPUT-'].update(input_string)
+                else:
+                    filepath = None
+                    main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n')
+
+            input_string = input_string[:-1]
+            main_window['-INPUT-'].update(input_string)
+
+        else:
+            if not os.sep in args.source_path[0]:
+                filepath = os.path.join(os.getcwd(),args.source_path[0])
             else:
-                filepath = None
-                main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n')
-        input_string = input_string[:-1]
-        main_window['-INPUT-'].update(input_string)
+                filepath = args.source_path[0]
+
+            if os.path.isfile(filepath):
+                main_window['-INPUT-'].update(filepath)
+            else:
+                main_window['-INPUT-'].update('')
+                main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
 
     if args.src_language:
         if args.src_language not in map_language_of_code.keys():
@@ -912,7 +937,7 @@ def main():
         main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
 
 
-    if  (sys.platform == "win32"):
+    if (sys.platform == "win32"):
         main_window.TKroot.attributes('-topmost', True)
         main_window.TKroot.attributes('-topmost', False)
 
@@ -948,13 +973,13 @@ def main():
             src = map_code_of_language[str(main_window['-SRC-'].get())]
             dst = map_code_of_language[str(main_window['-DST-'].get())]
             filelist = []
-            filelist += values[0].split(';')
+            filelist += values['-INPUT-'].split(';')
             subtitle_format = values['-SUBTITLE-FORMAT-']
             thread_transcribe = None
             all_threads = []
             main_window['-RESULTS-'].update('', append=False)
 
-            if filelist and src and dst and subtitle_format:
+            if len(filelist)>0 and src and dst and subtitle_format:
                 not_transcribing = not not_transcribing
 
                 if not not_transcribing:
