@@ -1189,7 +1189,7 @@ def main():
                 main_window['-INPUT-'].update(filepath)
             else:
                 main_window['-INPUT-'].update('')
-                main_window['-ML1-'].update('File path you typed is not exist, please browse it\n\n')
+                main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n\n')
 
     if args.src_language:
         if args.src_language not in map_language_of_code.keys():
