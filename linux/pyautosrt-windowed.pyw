@@ -147,6 +147,7 @@ class FfmpegProgress:
             "stdout": subprocess.PIPE,
             "stderr": subprocess.STDOUT,
             "universal_newlines": False,
+            "shell": True,
         }
 
     def set_stderr_callback(self, callback: Callable[[str], None]) -> None:
@@ -284,12 +285,13 @@ class FfmpegProgress:
 
 #--------------------------------------------------------------------------------------------------------------------------------------#
 
-import sys
+'''
 if sys.platform == 'win32':
     # Disable console window
     import ctypes
     ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-    ctypes.windll.kernel32.SetConsoleTitleW("My Application")
+    ctypes.windll.kernel32.SetConsoleTitleW("PyAutoSRT")
+'''
 
 not_transcribing = True
 filepath = None
@@ -763,14 +765,16 @@ def extract_audio(filename, main_window, channels=1, rate=16000):
         not_transcribing=True
         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
 
+    '''
     if not ffmpeg_check():
         #print("ffmpeg: Executable not found on machine.")
         #raise Exception("Dependency not found: ffmpeg")
         main_window['-OUTPUT-MESSAGES-'].update('ffmpeg: Executable not found on machine.')
         not_transcribing=True
         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+    '''
 
-    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
+    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "-1", temp.name]
     ff = FfmpegProgress(command)
     file_display_name = os.path.basename(filename).split('/')[-1]
     for progress in ff.run_command_with_progress():
