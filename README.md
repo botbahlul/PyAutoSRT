@@ -53,23 +53,24 @@ python setup.py install
 ### Usage 
 
 ```
-usage: pyautosrt [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-F FORMAT] [-v] [-lf] [-ll] [source_path ...]
+usage: pyautosrt.py [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-ll] [-F FORMAT] [-lf] [-v] [source_path ...]
 
 positional arguments:
-  source_path           Path to the video or audio files to generate subtitle (use wildcard for multiple files)
+  source_path           Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with
+                        space eg. "file 1.mp4" "file 2.mp4")
 
 options:
   -h, --help            show this help message and exit
   -S SRC_LANGUAGE, --src-language SRC_LANGUAGE
-                        Voice language
+                        Spoken language
   -D DST_LANGUAGE, --dst-language DST_LANGUAGE
                         Desired language for translation
-  -F FORMAT, --format FORMAT
-                        Destination subtitle format
-  -v, --version         show program's version number and exit
-  -lf, --list-formats   List all available subtitle formats
   -ll, --list-languages
                         List all available source/translation languages
+  -F FORMAT, --format FORMAT
+                        Desired subtitle format
+  -lf, --list-formats   List all available subtitle formats
+  -v, --version         show program's version number and exit
 ```
 
 Those command switch '-S' and '-D' are not mandatory. It's just to make combobox directly select your desired language if you prefer to type it rather that click on combobox.
