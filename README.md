@@ -6,7 +6,7 @@ https://user-images.githubusercontent.com/88623122/218178963-fb77891c-1845-4514-
 
 
 
-### Auto-generated subtitles files for any video/audio files
+### Auto generate subtitles files for any video/audio files
 
 PyAutoSRT is a PySimpleGUI based desktop app to auto generate subtitle and translated subtitle file for any video or audio file
 
