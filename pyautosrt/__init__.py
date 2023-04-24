@@ -30,6 +30,7 @@ from streamlink import Streamlink
 from streamlink.exceptions import NoPluginError, StreamlinkError, StreamError
 from datetime import datetime, timedelta
 import shutil
+import select
 
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -38,7 +39,7 @@ import shutil
 #sys.tracebacklimit = 0
 
 
-#-------------------------------------------------------- ffmpeg_progress_yield --------------------------------------------------------#
+#======================================================== ffmpeg_progress_yield ========================================================#
 
 
 import re
@@ -56,7 +57,7 @@ def to_ms(**kwargs: Union[float, int, str]) -> int:
 
 
 def _probe_duration(cmd: List[str]) -> Optional[int]:
-    """
+    '''
     Get the duration via ffprobe from input media file
     in case ffmpeg was run with loglevel=error.
 
@@ -65,7 +66,7 @@ def _probe_duration(cmd: List[str]) -> Optional[int]:
 
     Returns:
         Optional[int]: The duration in milliseconds.
-    """
+    '''
 
     def _get_file_name(cmd: List[str]) -> Optional[str]:
         try:
@@ -84,7 +85,7 @@ def _probe_duration(cmd: List[str]) -> Optional[int]:
                 [
                     "ffprobe",
                     "-loglevel",
-                    "error",
+                    "-1",
                     "-hide_banner",
                     "-show_entries",
                     "format=duration",
@@ -93,14 +94,14 @@ def _probe_duration(cmd: List[str]) -> Optional[int]:
                     file_name,
                 ],
                 universal_newlines=True,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
         else:
             output = subprocess.check_output(
                 [
                     "ffprobe",
                     "-loglevel",
-                    "error",
+                    "-1",
                     "-hide_banner",
                     "-show_entries",
                     "format=duration",
@@ -137,27 +138,35 @@ class FfmpegProgress:
     )
 
     def __init__(self, cmd: List[str], dry_run: bool = False) -> None:
-        """Initialize the FfmpegProgress class.
+        '''Initialize the FfmpegProgress class.
 
         Args:
             cmd (List[str]): A list of command line elements, e.g. ["ffmpeg", "-i", ...]
             dry_run (bool, optional): Only show what would be done. Defaults to False.
-        """
+        '''
         self.cmd = cmd
         self.stderr: Union[str, None] = None
         self.dry_run = dry_run
         self.process: Any = None
         self.stderr_callback: Union[Callable[[str], None], None] = None
-        self.base_popen_kwargs = {
-            "stdin": subprocess.PIPE,  # Apply stdin isolation by creating separate pipe.
-            "stdout": subprocess.PIPE,
-            "stderr": subprocess.STDOUT,
-            "universal_newlines": False,
-            "shell": True,
-        }
+        if sys.platform == "win32":
+            self.base_popen_kwargs = {
+                "stdin": subprocess.PIPE,  # Apply stdin isolation by creating separate pipe.
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "universal_newlines": False,
+                "shell": True,
+            }
+        else:
+            self.base_popen_kwargs = {
+                "stdin": subprocess.PIPE,  # Apply stdin isolation by creating separate pipe.
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "universal_newlines": False,
+            }
 
     def set_stderr_callback(self, callback: Callable[[str], None]) -> None:
-        """
+        '''
         Set a callback function to be called on stderr output.
         The callback function must accept a single string argument.
         Note that this is called on every line of stderr output, so it can be called a lot.
@@ -165,7 +174,7 @@ class FfmpegProgress:
 
         Args:
             callback (Callable[[str], None]): A callback function that accepts a single string argument.
-        """
+        '''
         if not callable(callback) or len(callback.__code__.co_varnames) != 1:
             raise ValueError(
                 "Callback must be a function that accepts only one argument"
@@ -176,7 +185,7 @@ class FfmpegProgress:
     def run_command_with_progress(
         self, popen_kwargs=None, duration_override: Union[float, None] = None
     ) -> Iterator[int]:
-        """
+        '''
         Run an ffmpeg command, trying to capture the process output and calculate
         the duration / progress.
         Yields the progress in percent.
@@ -190,7 +199,7 @@ class FfmpegProgress:
 
         Yields:
             Iterator[int]: A generator that yields the progress in percent.
-        """
+        '''
         if self.dry_run:
             return self.cmd
 
@@ -232,7 +241,7 @@ class FfmpegProgress:
             if self.stderr_callback:
                 self.stderr_callback(stderr_line)
 
-            if stderr_line == "" and self.process.poll() is not None:
+            if stderr_line == '' and self.process.poll() is not None:
                 break
 
             stderr.append(stderr_line.strip())
@@ -253,9 +262,11 @@ class FfmpegProgress:
                 progress_time = FfmpegProgress.TIME_REGEX.search(stderr_line)
                 if progress_time:
                     elapsed_time = to_ms(**progress_time.groupdict())
-                    yield int(elapsed_time / total_dur * 100)
+                    yield int(elapsed_time * 100/ total_dur)
 
         if self.process is None or self.process.returncode != 0:
+            #print(self.process)
+            #print(self.process.returncode)
             _pretty_stderr = "\n".join(stderr)
             raise RuntimeError(f"Error running command {self.cmd}: {_pretty_stderr}")
 
@@ -263,12 +274,12 @@ class FfmpegProgress:
         self.process = None
 
     def quit_gracefully(self) -> None:
-        """
+        '''
         Quit the ffmpeg process by sending 'q'
 
         Raises:
             RuntimeError: If no process is found.
-        """
+        '''
         if self.process is None:
             raise RuntimeError("No process found. Did you run the command?")
 
@@ -277,19 +288,21 @@ class FfmpegProgress:
         self.process = None
 
     def quit(self) -> None:
-        """
+        '''
         Quit the ffmpeg process by sending SIGKILL.
 
         Raises:
             RuntimeError: If no process is found.
-        """
+        '''
         if self.process is None:
             raise RuntimeError("No process found. Did you run the command?")
 
         self.process.kill()
         self.process = None
 
-#--------------------------------------------------------------------------------------------------------------------------------------#
+
+#=======================================================================================================================================#
+
 
 '''
 # CLOSE CONSOLE WINDOW
@@ -307,22 +320,6 @@ class RECT(ctypes.Structure):
                 ("right", ctypes.c_long),
                 ("bottom", ctypes.c_long)]
 
-def get_taskbar_height():
-    # Get the handle to the shell window
-    handle = ctypes.windll.user32.FindWindowW("Shell_TrayWnd", None)
-
-    # Get the handle to the child window (the taskbar)
-    taskbar_handle = ctypes.windll.user32.FindWindowExW(handle, None, "TrayNotifyWnd", None)
-
-    # Get the rectangle of the taskbar window
-    rect = RECT()
-    ctypes.windll.user32.GetWindowRect(taskbar_handle, ctypes.byref(rect))
-
-    # Calculate and return the height of the taskbar
-    return rect.bottom - rect.top
-
-# Calculate the taskbar height by subtracting the work area height from the screen height
-taskbar_height = get_taskbar_height()
 
 not_transcribing = True
 filepath = None
@@ -625,9 +622,9 @@ arraylist_subtitle_format.append("raw");
 
 
 def srt_formatter(subtitles, padding_before=0, padding_after=0):
-    """
+    '''
     Serialize a list of subtitles according to the SRT format, with optional time padding.
-    """
+    '''
     sub_rip_file = pysrt.SubRipFile()
     for i, ((start, end), text) in enumerate(subtitles, start=1):
         item = pysrt.SubRipItem()
@@ -640,18 +637,18 @@ def srt_formatter(subtitles, padding_before=0, padding_after=0):
 
 
 def vtt_formatter(subtitles, padding_before=0, padding_after=0):
-    """
+    '''
     Serialize a list of subtitles according to the VTT format, with optional time padding.
-    """
+    '''
     text = srt_formatter(subtitles, padding_before, padding_after)
     text = 'WEBVTT\n\n' + text.replace(',', '.')
     return text
 
 
 def json_formatter(subtitles):
-    """
+    '''
     Serialize a list of subtitles as a JSON blob.
-    """
+    '''
     subtitle_dicts = [
         {
             'start': start,
@@ -665,9 +662,9 @@ def json_formatter(subtitles):
 
 
 def raw_formatter(subtitles):
-    """
+    '''
     Serialize a list of subtitles as a newline-delimited string.
-    """
+    '''
     return ' '.join(text for (_rng, text) in subtitles)
 
 
@@ -764,13 +761,13 @@ class SpeechRecognizer(object):
 
 
 def which(program):
-    """
+    '''
     Return the path for a given executable.
-    """
+    '''
     def is_exe(file_path):
-        """
+        '''
         Checks whether a file is executable.
-        """
+        '''
         return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
 
     fpath, _ = os.path.split(program)
@@ -787,9 +784,9 @@ def which(program):
 
 
 def ffmpeg_check():
-    """
+    '''
     Return the ffmpeg executable name. "None" returned when no executable exists.
-    """
+    '''
     if which("ffmpeg"):
         return "ffmpeg"
     if which("ffmpeg.exe"):
@@ -826,7 +823,8 @@ def extract_audio(filename, main_window, channels=1, rate=16000):
         append_flag = False
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "-1", temp.name]
+    #command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "-1", temp.name]
+    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
     ff = FfmpegProgress(command)
     file_display_name = os.path.basename(filename).split('/')[-1]
 
@@ -915,7 +913,7 @@ def GoogleTranslate(text, src, dst):
             #print('response_json = {}'.format(response_json))
             length = len(response_json)
             #print('length = {}'.format(length))
-            translation = ""
+            translation = ''
             for i in range(length):
                 #print("{} {}".format(i, response_json[i][0]))
                 translation = translation + response_json[i][0]
@@ -965,7 +963,7 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
     if not_transcribing: return
 
     window_key = '-OUTPUT-MESSAGES-'
-    msg = ""
+    msg = ''
     append_flag = False
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -1210,8 +1208,8 @@ def stop_thread(thread):
         main_window.write_event_value("-EXCEPTION-", "nonexistent thread id")
         raise ValueError("nonexistent thread id")
     elif res > 1:
-        # """if it returns a number greater than one, you're in trouble,
-        # and you should call it again with exc=NULL to revert the effect"""
+        # '''if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect'''
         ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
         main_window.write_event_value("-EXCEPTION-", "PyThreadState_SetAsyncExc failed")
         raise SystemError("PyThreadState_SetAsyncExc failed")
@@ -1241,6 +1239,14 @@ def move_center(window):
     win_width, win_height = window.size
     x, y = (screen_width-win_width)//2, ((screen_height-win_height)//2) - 30
     window.move(x, y)
+
+
+def get_clipboard_text():
+    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out']).decode()
+
+
+def set_clipboard_text(text):
+    subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode())
 
 
 def scroll_to_last_line(window, element):
@@ -1364,45 +1370,87 @@ def record_streaming_windows(hls_url, filename):
 
 
 # subprocess.Popen(ffmpeg_cmd) THREAD BEHAVIOR IS DIFFERENT IN LINUX
-def record_streaming_linux(hls_url, output_file):
-    global not_recording, main_window
+def record_streaming_linux(url, output_file):
+    global recognizing, ffmpeg_start_run_time, first_streaming_duration_recorded, main_window
 
-    ffmpeg_cmd = ['ffmpeg', '-y', '-i', hls_url,  '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov', '-fflags', 'nobuffer', output_file]
+    #ffmpeg_cmd = ['ffmpeg', '-y', '-i', url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', output_file]
+    ffmpeg_cmd = ['ffmpeg', '-y', '-i', f'{url}',  '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov', '-fflags', 'nobuffer', f'{output_file}']
 
+    ffmpeg_start_run_time = datetime.now()
+
+    # Define a function to run the ffmpeg process in a separate thread
     def run_ffmpeg():
+        i = 0
         line = None
+
         process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
         msg = "RECORDING"
         main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
+
+        # Set up a timer to periodically check for new output
         timeout = 1.0
         timer = Timer(timeout, lambda: None)
         timer.start()
 
+        # Read output from ffmpeg process
         while not not_recording:
+            # Check if the process has finished
             if process.poll() is not None:
                 break
 
+            # Check if there is new output to read, special for linux
             rlist, _, _ = select.select([process.stderr], [], [], timeout)
             if not rlist:
                 continue
 
+            # Read the new output and print it
             line = rlist[0].readline().strip()
+            #print(line)
+
+            # Search for the time information in the output and print it
             time_str = re.search(r'time=(\d+:\d+:\d+\.\d+)', line)
 
             if time_str:
+                time_value = time_str.group(1)
+                #print(f"Time: {time_value}")
+
+                if i == 0:
+                    ffmpeg_start_write_time = datetime.now()
+                    #print("ffmpeg_start_write_time = {}".format(ffmpeg_start_write_time))
+
+                    first_streaming_duration_recorded = datetime.strptime(str(time_value), "%H:%M:%S.%f") - datetime(1900, 1, 1)
+                    #print("first_streaming_duration_recorded = {}".format(first_streaming_duration_recorded))
+
+                    # MAKE SURE THAT first_streaming_duration_recorded EXECUTED ONLY ONCE
+                    i += 1
+
+                    #print("writing time_value")
+                    time_value_filename = "time_value"
+                    time_value_filepath = os.path.join(tempfile.gettempdir(), time_value_filename)
+                    time_value_file = open(time_value_filepath, "w")
+                    time_value_file.write(str(time_value))
+                    time_value_file.close()
+                    #print("time_value = {}".format(time_value))
+
                 streaming_duration_recorded = datetime.strptime(str(time_value), "%H:%M:%S.%f") - datetime(1900, 1, 1)
+                #print("streaming_duration_recorded = {}".format(streaming_duration_recorded))
                 main_window.write_event_value('-EVENT-STREAMING-DURATION-RECORDED-', streaming_duration_recorded)
 
+            # Restart the timer to check for new output
             timer.cancel()
             timer = Timer(timeout, lambda: None)
             if not not_recording: timer.start()
 
+        # Close the ffmpeg process and print the return code
         process.stdout.close()
         process.stderr.close()
 
+    # Start the thread to run ffmpeg
     thread = Thread(target=run_ffmpeg)
     if not not_recording: thread.start()
 
+    # Return the thread object so that the caller can join it if needed
     return thread
 
 
@@ -1450,8 +1498,8 @@ def stop_record_streaming_linux():
         if res == 0:
             raise ValueError("nonexistent thread id")
         elif res > 1:
-            # """if it returns a number greater than one, you're in trouble,
-            # and you should call it again with exc=NULL to revert the effect"""
+            # '''if it returns a number greater than one, you're in trouble,
+            # and you should call it again with exc=NULL to revert the effect'''
             ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_record_streaming.ident, None)
             raise SystemError("PyThreadState_SetAsyncExc failed")
 
@@ -1557,7 +1605,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-v', '--version', action='version', version='0.1.8')
+    parser.add_argument('-v', '--version', action='version', version='0.1.9')
 
     args = parser.parse_args()
 
@@ -1621,8 +1669,8 @@ def main():
                 ],
                 [
                     sg.Text("Browsed Files", size=(18,1)),
-                    sg.Input(key="-INPUT-", enable_events=True, size=(80,10), expand_x=True, expand_y=True,),
-                    sg.Text("", size=(12,1)),
+                    sg.Input(key='-INPUT-', enable_events=True, size=(80,10), expand_x=True, expand_y=True,),
+                    sg.Text('', size=(12,1)),
                 ],
                 [
                     sg.Text("File List", size=(18,1)),
@@ -1638,7 +1686,7 @@ def main():
                 ],
                 [sg.Text("Progress", key='-INFO-')],
                 [
-                    sg.ProgressBar(100, orientation='h', size=(60, 1), expand_x=True, expand_y=True, key='-PROGRESS-'),
+                    sg.ProgressBar(100, orientation='h', size=(88, 1), expand_x=True, expand_y=True, key='-PROGRESS-'),
                     sg.Text("0%", size=(5,1), expand_x=True, expand_y=True, key='-PERCENTAGE-', justification='r')
                 ],
                 [sg.Text('Progress log')],
@@ -1773,10 +1821,10 @@ def main():
                 break
 
 
-        elif event == "-INPUT-":
+        elif event == '-INPUT-':
 
             n = 0
-            browsed_files += values["-INPUT-"].split(";")
+            browsed_files += values['-INPUT-'].split(';')
             #print("browsed_files = {}".format(browsed_files))
 
             if browsed_files != ['']:
@@ -1787,33 +1835,35 @@ def main():
                         if file not in filelist and os.path.isfile(file):
                             filelist.append(file)
 
-            main_window["-LIST-"].update(filelist)
+            main_window['-LIST-'].update(filelist)
             browsed_files = []
 
 
-        elif event == "-REMOVE-":
+        elif event == '-REMOVE-':
 
-            listbox_selection = values["-LIST-"]
+            listbox_selection = values['-LIST-']
             if listbox_selection:
                 for index in listbox_selection[::-1]:
                     filelist.remove(index)
-                main_window["-LIST-"].update(filelist)
+                main_window['-LIST-'].update(filelist)
 
 
         elif event == 'Delete:46' and values['-LIST-']:
 
-            listbox_selection = values["-LIST-"]
+            listbox_selection = values['-LIST-']
             if listbox_selection:
                 for index in listbox_selection[::-1]:
                     filelist.remove(index)
-                main_window["-LIST-"].update(filelist)
+                main_window['-LIST-'].update(filelist)
 
 
-        elif event == "-CLEAR-":
+        elif event == '-CLEAR-':
 
-            main_window["-INPUT-"].update("")
+            main_window['-INPUT-'].update('')
             filelist = []
-            main_window["-LIST-"].update(filelist)
+            main_window['-LIST-'].update(filelist)
+            main_window['-OUTPUT-MESSAGES-'].update('')
+            main_window['-RESULTS-'].update('')
 
 
         elif event == '-START-':
@@ -1849,7 +1899,7 @@ def main():
                         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
                         for t in all_threads:
                             t.join()
-                        main_window['-OUTPUT-MESSAGES-'].update("", append=False)
+                        main_window['-OUTPUT-MESSAGES-'].update('', append=False)
                         main_window['-OUTPUT-MESSAGES-'].update("All tasks has been canceled", append=False)
 
             else:
@@ -1885,7 +1935,7 @@ def main():
             #sg.Popup("File format is not supported", title="Info", line_width=50)
             sg.Popup(e, title="Info", line_width=50)
             main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-            main_window['-OUTPUT-MESSAGES-'].update("", append=False)
+            main_window['-OUTPUT-MESSAGES-'].update('', append=False)
 
 
         elif event.endswith('+R') and values['-URL-']:
@@ -1945,7 +1995,7 @@ def main():
             if not is_valid_url_streaming:
                 sg.set_options(font=("Helvetica", 9))
                 sg.Popup('Invalid URL, please enter a valid URL.                   ', title="Info", line_width=50)
-                main_window['-URL-'].update("")
+                main_window['-URL-'].update('')
 
             else:
                 not_recording = not not_recording
@@ -1953,7 +2003,7 @@ def main():
 
                 #if tmp_recorded_streaming_filepath and os.path.isfile(tmp_recorded_streaming_filepath): os.remove(tmp_recorded_streaming_filepath)
 
-                if main_window['-URL-'].get() != (None or "") and not_recording == False:
+                if main_window['-URL-'].get() != (None or '') and not_recording == False:
 
                     if is_valid_url_streaming:
 
