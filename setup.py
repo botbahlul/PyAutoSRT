@@ -36,6 +36,7 @@ setup(
         "six>=1.11.0",
         "pysimplegui>=4.60.1",
         "httpx>=0.13.3",
+        "streamlink>=5.3.1",
     ],
     license=open("LICENSE").read()
 )
