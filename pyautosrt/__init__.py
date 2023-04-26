@@ -1605,7 +1605,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-v', '--version', action='version', version='0.1.9')
+    parser.add_argument('-v', '--version', action='version', version='0.1.10')
 
     args = parser.parse_args()
 
