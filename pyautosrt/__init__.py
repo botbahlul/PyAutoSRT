@@ -900,7 +900,7 @@ def find_speech_regions(filename, frame_width=4096, min_region_size=0.3, max_reg
         i=i+1
     return regions
 
-
+'''
 def GoogleTranslate(text, src, dst):
     url = 'https://translate.googleapis.com/translate_a/'
     params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
@@ -919,6 +919,21 @@ def GoogleTranslate(text, src, dst):
                 translation = translation + response_json[i][0]
             return translation
         return
+'''
+
+def GoogleTranslate(text, src, dst):
+    url = 'https://translate.googleapis.com/translate_a/'
+    params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://translate.google.com',}
+    response = requests.get(url+params, headers=headers)
+    if response.status_code == 200:
+        response_json = response.json()[0]
+        length = len(response_json)
+        translation = ""
+        for i in range(length):
+            translation = translation + response_json[i][0]
+        return translation
+    return
 
 
 class SentenceTranslator(object):
@@ -1605,7 +1620,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-v', '--version', action='version', version='0.1.10')
+    parser.add_argument('-v', '--version', action='version', version='0.1.11')
 
     args = parser.parse_args()
 
@@ -1696,7 +1711,7 @@ def main():
                 [sg.Button('Start', expand_x=True, expand_y=True, key='-START-'),sg.Button('Exit', expand_x=True, expand_y=True)]
             ]
 
-    main_window = sg.Window('PyAutoSRT-0.1.9', layout, font=font, resizable=True, keep_on_top=True, finalize=True)
+    main_window = sg.Window('PyAutoSRT-0.1.11', layout, font=font, resizable=True, keep_on_top=True, finalize=True)
     main_window['-SRC-'].block_focus()
     FONT_TYPE = "Arial"
     FONT_SIZE = 9
