@@ -55,7 +55,7 @@ python setup.py install
 ### Usage 
 
 ```
-usage: pyautosrt.py [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-ll] [-F FORMAT] [-lf] [-v] [source_path ...]
+usage: pyautosrt [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-ll] [-F FORMAT] [-lf] [-v] [source_path ...]
 
 positional arguments:
   source_path           Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with
@@ -75,7 +75,7 @@ options:
   -v, --version         show program's version number and exit
 ```
 
-Those command switch '-S' and '-D' are not mandatory. It's just to make combobox directly select your desired language if you prefer to type it rather that click on combobox.
+Those command switches '-S' and '-D' are not mandatory. It's just to make combobox directly select your desired language if you prefer to type it rather that click on combobox.
 
 UPDATE NOTES : SINCE VERSION 0.1.1 YOU CAN SELECT MULTIPLE VIDEO/AUDIO FILES, BUT REMEMBER THAT ALL FILES YOU SELECT SHOULD HAVE SAME AUDIO LANGUAGE AND DESIRED TRANSLATION LANGUAGE.
 
