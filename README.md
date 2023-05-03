@@ -23,7 +23,7 @@ https://github.com/agermanidis/autosub
 
 If you don't have python on your Windows system you can get compiled version from https://github.com/botbahlul/pyautosrt/releases/
 
-Just extract those ffmpeg.exe and pyautosrt.exe into a folder that has been added to PATH ENVIRONTMET for example in C:\Windows\system32
+Just extract those ffmpeg.exe and pyautosrt.exe into a folder that has been added to PATH ENVIRONTMENT for example in C:\Windows\system32
 
 You can get latest version of ffmpeg from https://www.ffmpeg.org/
 
