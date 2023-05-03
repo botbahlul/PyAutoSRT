@@ -337,7 +337,7 @@ all_threads = []
 
 #-------------------------------------------------------------- CONSTANTS --------------------------------------------------------------#
 
-VERSION = "0.1.13"
+VERSION = "0.1.14"
 
 GOOGLE_SPEECH_API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
 GOOGLE_SPEECH_API_URL = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}" # pylint: disable=line-too-long
@@ -1720,7 +1720,7 @@ def main():
                 [sg.Button('Start', expand_x=True, expand_y=True, key='-START-'),sg.Button('Exit', expand_x=True, expand_y=True)]
             ]
 
-    main_window = sg.Window('PyAutoSRT-0.1.11', layout, font=font, resizable=True, keep_on_top=True, finalize=True)
+    main_window = sg.Window('PyAutoSRT-'+VERSION, layout, font=font, resizable=True, keep_on_top=True, finalize=True)
     main_window['-SRC-'].block_focus()
     FONT_TYPE = "Arial"
     FONT_SIZE = 9

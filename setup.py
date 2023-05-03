@@ -37,6 +37,7 @@ setup(
         "pysimplegui>=4.60.1",
         "httpx>=0.13.3",
         "streamlink>=5.3.1",
+        "urllib3 >=1.26.0,<2.0",
     ],
     license=open("LICENSE").read()
 )
