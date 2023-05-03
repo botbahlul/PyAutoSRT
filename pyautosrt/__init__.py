@@ -26,11 +26,13 @@ import tkinter as tk
 import httpx
 from glob import glob
 import ctypes
+import ctypes.wintypes
 from streamlink import Streamlink
 from streamlink.exceptions import NoPluginError, StreamlinkError, StreamError
 from datetime import datetime, timedelta
 import shutil
 import select
+
 
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -1620,7 +1622,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-v', '--version', action='version', version='0.1.11')
+    parser.add_argument('-v', '--version', action='version', version='0.1.12')
 
     args = parser.parse_args()
 

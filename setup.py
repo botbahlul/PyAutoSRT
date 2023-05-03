@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 try:
-    from setuptools import setup
+    from setuptools import setup, find_packages
 except ImportError:
     from distutils.core import setup
 
@@ -18,13 +18,13 @@ long_description = (
 
 setup(
     name="pyautosrt",
-    version="0.1.11",
+    version="0.1.12",
     description="pyautosrt is a python based desktop app to generate subtitle and translated subtitle file",
     long_description = long_description,
     author="Bot Bahlul",
     author_email="bot.bahlul@gmail.com",
     url="https://github.com/botbahlul/pyautosrt",
-    packages=[str("pyautosrt")],
+    packages=find_packages(),
     entry_points={
         "console_scripts": [
             "pyautosrt = pyautosrt:main",
