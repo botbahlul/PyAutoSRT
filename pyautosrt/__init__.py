@@ -33,7 +33,6 @@ from datetime import datetime, timedelta
 import shutil
 import select
 
-
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
 #warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -338,6 +337,7 @@ all_threads = []
 
 #-------------------------------------------------------------- CONSTANTS --------------------------------------------------------------#
 
+VERSION = "0.1.13"
 
 GOOGLE_SPEECH_API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
 GOOGLE_SPEECH_API_URL = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}" # pylint: disable=line-too-long
@@ -1205,9 +1205,9 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
         not_transcribing = True
         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
 
-    remove_temp_files("wav")
-    remove_temp_files("flac")
-    remove_temp_files("mp4")
+    #remove_temp_files("wav")
+    #remove_temp_files("flac")
+    #remove_temp_files("mp4")
 
 
 def remove_temp_files(extension):
@@ -1259,7 +1259,14 @@ def move_center(window):
 
 
 def get_clipboard_text():
-    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out']).decode()
+    try:
+        output = subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], stderr=subprocess.PIPE).decode()
+        if output:
+            return output.strip()
+        else:
+            return None
+    except subprocess.CalledProcessError:
+        return None
 
 
 def set_clipboard_text(text):
@@ -1622,7 +1629,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
-    parser.add_argument('-v', '--version', action='version', version='0.1.12')
+    parser.add_argument('-v', '--version', action='version', version=VERSION)
 
     args = parser.parse_args()
 
@@ -1789,13 +1796,23 @@ def main():
         main_window.TKroot.attributes('-topmost', 1)
         main_window.TKroot.attributes('-topmost', 0)
 
-    src = map_code_of_language[str(main_window['-SRC-'].get())]
+    src_name = str(main_window['-SRC-'].get())
+    if src_name:
+        src = map_code_of_language[src_name]
+    else:
+        src_name = "English"
+        src = map_code_of_language[src_name]
     last_selected_src = src
     src_file = open(src_filepath, "w")
     src_file.write(src)
     src_file.close()
 
-    dst = map_code_of_language[str(main_window['-DST-'].get())]
+    dst_name = str(main_window['-DST-'].get())
+    if dst_name:
+        dst = map_code_of_language[dst_name]
+    else:
+        dst_name = "Indonesian"
+        dst = map_code_of_language[dst_name]
     last_selected_dst = dst
     dst_file = open(dst_filepath, "w")
     dst_file.write(dst)

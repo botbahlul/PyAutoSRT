@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from __future__ import unicode_literals
-
+from pyautosrt import VERSION
 try:
     from setuptools import setup, find_packages
 except ImportError:
@@ -18,7 +18,7 @@ long_description = (
 
 setup(
     name="pyautosrt",
-    version="0.1.12",
+    version=VERSION,
     description="pyautosrt is a python based desktop app to generate subtitle and translated subtitle file",
     long_description = long_description,
     author="Bot Bahlul",
