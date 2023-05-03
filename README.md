@@ -10,7 +10,7 @@ SINCE VERSION 0.1.13 I ADDED streamlink MODULE WHICH SUPPORTS urllib3 <=1.x BRAN
 pip install streamlink --force-reinstall
 ```
 
-TO COMPILE THAT pyautosrt.pyw IN LINUX/WIN FOLDER WITH pyinstaller YOU SHOULD USE THAT \"mypyinstaller.bat\" or \"mypyinstaller.sh\"
+TO COMPILE THAT pyautosrt.pyw IN LINUX/WIN FOLDER WITH pyinstaller YOU SHOULD USE THAT \"mypyinstaller.bat\"/ \"mypyinstaller.sh\"
 
 ### Auto generate subtitles files for any video/audio files
 
