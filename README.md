@@ -49,8 +49,6 @@ The executable compiled file will be placed by pyinstaller into dist subfolder o
 
 I was succesfuly compiled it in Windows 10 with pyinstaller-5.1 and Pyhton-3.10.4, and python-3.8.12 in Debian 9
 
-NOTES : SINCE VERSION 0.1.9 YOU SHOULD USE THAT \"mypyinstaller.bat\" (FOR WINDOWS) OR \"mypyinstaller.sh\" (FOR LINUX) TO COMPILE THAT \"pyautosrt.pyw\"
-
 Another alternative way to install this script with python is by cloning this git (or downloading this git as zip then extract it into a folder), and then just type :
 
 ```
