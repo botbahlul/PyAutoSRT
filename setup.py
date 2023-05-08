@@ -38,6 +38,7 @@ setup(
         "httpx>=0.13.3",
         "streamlink>=5.3.1",
         "urllib3 >=1.26.0,<2.0",
+        "autosrt >=1.2.10",
     ],
     license=open("LICENSE").read()
 )
