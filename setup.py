@@ -1,5 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3.8
 from __future__ import unicode_literals
+import sys
 from pyautosrt import VERSION
 try:
     from setuptools import setup, find_packages
@@ -16,6 +17,20 @@ long_description = (
     'subtitles in SRT, VTT, JSON, and RAW format.'
 )
 
+install_requires=[
+    "requests>=2.3.0",
+    "pysrt>=1.0.1",
+    "six>=1.11.0",
+    "pysimplegui>=4.60.1",
+    "httpx>=0.13.3",
+    "streamlink>=5.3.1",
+    "urllib3 >=1.26.0,<2.0",
+    "autosrt >=1.2.11",
+]
+
+if sys.platform == "win32":
+    install_requires.append("pywin32>=306")
+
 setup(
     name="pyautosrt",
     version=VERSION,
@@ -30,15 +45,6 @@ setup(
             "pyautosrt = pyautosrt:main",
         ],
     },
-    install_requires=[
-        "requests>=2.3.0",
-        "pysrt>=1.0.1",
-        "six>=1.11.0",
-        "pysimplegui>=4.60.1",
-        "httpx>=0.13.3",
-        "streamlink>=5.3.1",
-        "urllib3 >=1.26.0,<2.0",
-        "autosrt >=1.2.11",
-    ],
+    install_requires=install_requires,
     license=open("LICENSE").read()
 )
