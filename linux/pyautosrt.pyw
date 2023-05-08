@@ -1709,6 +1709,7 @@ def start_transcription(media_filepaths, src, dst, subtitle_format):
 
 
 def stop_thread(thread):
+    global main_window
     exc = ctypes.py_object(SystemExit)
     res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread.ident), exc)
     if res == 0:
