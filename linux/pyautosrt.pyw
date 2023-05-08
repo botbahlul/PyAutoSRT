@@ -1378,9 +1378,6 @@ from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, 
     stop_ffmpeg_windows, stop_ffmpeg_linux, remove_temp_files, is_same_language, is_video_file, is_audio_file
 '''
 
-
-
-
 def show_progress(media_filepath, progress):
     global main_window
     file_display_name = os.path.basename(media_filepath).split('/')[-1]
