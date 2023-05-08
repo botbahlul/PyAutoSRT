@@ -20,18 +20,21 @@ import six
 # ADDTIONAL IMPORTS
 import io
 import time
+import threading
 from threading import Timer, Thread
 import PySimpleGUI as sg
 import tkinter as tk
 import httpx
 from glob import glob
 import ctypes
-import ctypes.wintypes
+if sys.platform == "win32":
+    import win32clipboard
 from streamlink import Streamlink
 from streamlink.exceptions import NoPluginError, StreamlinkError, StreamError
 from datetime import datetime, timedelta
 import shutil
 import select
+import magic
 
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -304,730 +307,115 @@ class FfmpegProgress:
 
 #=======================================================================================================================================#
 
-
-'''
-# CLOSE CONSOLE WINDOW
-import sys
-if sys.platform == 'win32':
-    # Disable console window
-    import ctypes
-    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-    ctypes.windll.kernel32.SetConsoleTitleW("My Application")
-'''
-
-class RECT(ctypes.Structure):
-    _fields_ = [("left", ctypes.c_long),
-                ("top", ctypes.c_long),
-                ("right", ctypes.c_long),
-                ("bottom", ctypes.c_long)]
+#----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-not_transcribing = True
-filepath = None
-wav_filename = None
-converter = None
-recognizer = None
-extracted_regions = None
-transcription = None
-subtitle_file = None
-translated_subtitle_file = None
-pool = None
-all_threads = []
+VERSION = "0.1.15"
 
 
-#-------------------------------------------------------------- CONSTANTS --------------------------------------------------------------#
-
-VERSION = "0.1.14"
-
-GOOGLE_SPEECH_API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
-GOOGLE_SPEECH_API_URL = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}" # pylint: disable=line-too-long
-
-arraylist_language_code = []
-arraylist_language_code.append("af")
-arraylist_language_code.append("sq")
-arraylist_language_code.append("am")
-arraylist_language_code.append("ar")
-arraylist_language_code.append("hy")
-arraylist_language_code.append("as")
-arraylist_language_code.append("ay")
-arraylist_language_code.append("az")
-arraylist_language_code.append("bm")
-arraylist_language_code.append("eu")
-arraylist_language_code.append("be")
-arraylist_language_code.append("bn")
-arraylist_language_code.append("bho")
-arraylist_language_code.append("bs")
-arraylist_language_code.append("bg")
-arraylist_language_code.append("ca")
-arraylist_language_code.append("ceb")
-arraylist_language_code.append("ny")
-arraylist_language_code.append("zh-CN")
-arraylist_language_code.append("zh-TW")
-arraylist_language_code.append("co")
-arraylist_language_code.append("hr")
-arraylist_language_code.append("cs")
-arraylist_language_code.append("da")
-arraylist_language_code.append("dv")
-arraylist_language_code.append("doi")
-arraylist_language_code.append("nl")
-arraylist_language_code.append("en")
-arraylist_language_code.append("eo")
-arraylist_language_code.append("et")
-arraylist_language_code.append("ee")
-arraylist_language_code.append("fil")
-arraylist_language_code.append("fi")
-arraylist_language_code.append("fr")
-arraylist_language_code.append("fy")
-arraylist_language_code.append("gl")
-arraylist_language_code.append("ka")
-arraylist_language_code.append("de")
-arraylist_language_code.append("el")
-arraylist_language_code.append("gn")
-arraylist_language_code.append("gu")
-arraylist_language_code.append("ht")
-arraylist_language_code.append("ha")
-arraylist_language_code.append("haw")
-arraylist_language_code.append("he")
-arraylist_language_code.append("hi")
-arraylist_language_code.append("hmn")
-arraylist_language_code.append("hu")
-arraylist_language_code.append("is")
-arraylist_language_code.append("ig")
-arraylist_language_code.append("ilo")
-arraylist_language_code.append("id")
-arraylist_language_code.append("ga")
-arraylist_language_code.append("it")
-arraylist_language_code.append("ja")
-arraylist_language_code.append("jv")
-arraylist_language_code.append("kn")
-arraylist_language_code.append("kk")
-arraylist_language_code.append("km")
-arraylist_language_code.append("rw")
-arraylist_language_code.append("gom")
-arraylist_language_code.append("ko")
-arraylist_language_code.append("kri")
-arraylist_language_code.append("kmr")
-arraylist_language_code.append("ckb")
-arraylist_language_code.append("ky")
-arraylist_language_code.append("lo")
-arraylist_language_code.append("la")
-arraylist_language_code.append("lv")
-arraylist_language_code.append("ln")
-arraylist_language_code.append("lt")
-arraylist_language_code.append("lg")
-arraylist_language_code.append("lb")
-arraylist_language_code.append("mk")
-arraylist_language_code.append("mg")
-arraylist_language_code.append("ms")
-arraylist_language_code.append("ml")
-arraylist_language_code.append("mt")
-arraylist_language_code.append("mi")
-arraylist_language_code.append("mr")
-arraylist_language_code.append("mni-Mtei")
-arraylist_language_code.append("lus")
-arraylist_language_code.append("mn")
-arraylist_language_code.append("my")
-arraylist_language_code.append("ne")
-arraylist_language_code.append("no")
-arraylist_language_code.append("or")
-arraylist_language_code.append("om")
-arraylist_language_code.append("ps")
-arraylist_language_code.append("fa")
-arraylist_language_code.append("pl")
-arraylist_language_code.append("pt")
-arraylist_language_code.append("pa")
-arraylist_language_code.append("qu")
-arraylist_language_code.append("ro")
-arraylist_language_code.append("ru")
-arraylist_language_code.append("sm")
-arraylist_language_code.append("sa")
-arraylist_language_code.append("gd")
-arraylist_language_code.append("nso")
-arraylist_language_code.append("sr")
-arraylist_language_code.append("st")
-arraylist_language_code.append("sn")
-arraylist_language_code.append("sd")
-arraylist_language_code.append("si")
-arraylist_language_code.append("sk")
-arraylist_language_code.append("sl")
-arraylist_language_code.append("so")
-arraylist_language_code.append("es")
-arraylist_language_code.append("su")
-arraylist_language_code.append("sw")
-arraylist_language_code.append("sv")
-arraylist_language_code.append("tg")
-arraylist_language_code.append("ta")
-arraylist_language_code.append("tt")
-arraylist_language_code.append("te")
-arraylist_language_code.append("th")
-arraylist_language_code.append("ti")
-arraylist_language_code.append("ts")
-arraylist_language_code.append("tr")
-arraylist_language_code.append("tk")
-arraylist_language_code.append("tw")
-arraylist_language_code.append("uk")
-arraylist_language_code.append("ur")
-arraylist_language_code.append("ug")
-arraylist_language_code.append("uz")
-arraylist_language_code.append("vi")
-arraylist_language_code.append("cy")
-arraylist_language_code.append("xh")
-arraylist_language_code.append("yi")
-arraylist_language_code.append("yo")
-arraylist_language_code.append("zu")
-
-arraylist_language = []
-arraylist_language.append("Afrikaans");
-arraylist_language.append("Albanian");
-arraylist_language.append("Amharic");
-arraylist_language.append("Arabic");
-arraylist_language.append("Armenian");
-arraylist_language.append("Assamese");
-arraylist_language.append("Aymara");
-arraylist_language.append("Azerbaijani");
-arraylist_language.append("Bambara");
-arraylist_language.append("Basque");
-arraylist_language.append("Belarusian");
-arraylist_language.append("Bengali");
-arraylist_language.append("Bhojpuri");
-arraylist_language.append("Bosnian");
-arraylist_language.append("Bulgarian");
-arraylist_language.append("Catalan");
-arraylist_language.append("Cebuano");
-arraylist_language.append("Chichewa");
-arraylist_language.append("Chinese (Simplified)");
-arraylist_language.append("Chinese (Traditional)");
-arraylist_language.append("Corsican");
-arraylist_language.append("Croatian");
-arraylist_language.append("Czech");
-arraylist_language.append("Danish");
-arraylist_language.append("Dhivehi");
-arraylist_language.append("Dogri");
-arraylist_language.append("Dutch");
-arraylist_language.append("English");
-arraylist_language.append("Esperanto");
-arraylist_language.append("Estonian");
-arraylist_language.append("Ewe");
-arraylist_language.append("Filipino");
-arraylist_language.append("Finnish");
-arraylist_language.append("French");
-arraylist_language.append("Frisian");
-arraylist_language.append("Galician");
-arraylist_language.append("Georgian");
-arraylist_language.append("German");
-arraylist_language.append("Greek");
-arraylist_language.append("Guarani");
-arraylist_language.append("Gujarati");
-arraylist_language.append("Haitian Creole");
-arraylist_language.append("Hausa");
-arraylist_language.append("Hawaiian");
-arraylist_language.append("Hebrew");
-arraylist_language.append("Hindi");
-arraylist_language.append("Hmong");
-arraylist_language.append("Hungarian");
-arraylist_language.append("Icelandic");
-arraylist_language.append("Igbo");
-arraylist_language.append("Ilocano");
-arraylist_language.append("Indonesian");
-arraylist_language.append("Irish");
-arraylist_language.append("Italian");
-arraylist_language.append("Japanese");
-arraylist_language.append("Javanese");
-arraylist_language.append("Kannada");
-arraylist_language.append("Kazakh");
-arraylist_language.append("Khmer");
-arraylist_language.append("Kinyarwanda");
-arraylist_language.append("Konkani");
-arraylist_language.append("Korean");
-arraylist_language.append("Krio");
-arraylist_language.append("Kurdish (Kurmanji)");
-arraylist_language.append("Kurdish (Sorani)");
-arraylist_language.append("Kyrgyz");
-arraylist_language.append("Lao");
-arraylist_language.append("Latin");
-arraylist_language.append("Latvian");
-arraylist_language.append("Lingala");
-arraylist_language.append("Lithuanian");
-arraylist_language.append("Luganda");
-arraylist_language.append("Luxembourgish");
-arraylist_language.append("Macedonian");
-arraylist_language.append("Malagasy");
-arraylist_language.append("Malay");
-arraylist_language.append("Malayalam");
-arraylist_language.append("Maltese");
-arraylist_language.append("Maori");
-arraylist_language.append("Marathi");
-arraylist_language.append("Meiteilon (Manipuri)");
-arraylist_language.append("Mizo");
-arraylist_language.append("Mongolian");
-arraylist_language.append("Myanmar (Burmese)");
-arraylist_language.append("Nepali");
-arraylist_language.append("Norwegian");
-arraylist_language.append("Odiya (Oriya)");
-arraylist_language.append("Oromo");
-arraylist_language.append("Pashto");
-arraylist_language.append("Persian");
-arraylist_language.append("Polish");
-arraylist_language.append("Portuguese");
-arraylist_language.append("Punjabi");
-arraylist_language.append("Quechua");
-arraylist_language.append("Romanian");
-arraylist_language.append("Russian");
-arraylist_language.append("Samoan");
-arraylist_language.append("Sanskrit");
-arraylist_language.append("Scots Gaelic");
-arraylist_language.append("Sepedi");
-arraylist_language.append("Serbian");
-arraylist_language.append("Sesotho");
-arraylist_language.append("Shona");
-arraylist_language.append("Sindhi");
-arraylist_language.append("Sinhala");
-arraylist_language.append("Slovak");
-arraylist_language.append("Slovenian");
-arraylist_language.append("Somali");
-arraylist_language.append("Spanish");
-arraylist_language.append("Sundanese");
-arraylist_language.append("Swahili");
-arraylist_language.append("Swedish");
-arraylist_language.append("Tajik");
-arraylist_language.append("Tamil");
-arraylist_language.append("Tatar");
-arraylist_language.append("Telugu");
-arraylist_language.append("Thai");
-arraylist_language.append("Tigrinya");
-arraylist_language.append("Tsonga");
-arraylist_language.append("Turkish");
-arraylist_language.append("Turkmen");
-arraylist_language.append("Twi (Akan)");
-arraylist_language.append("Ukrainian");
-arraylist_language.append("Urdu");
-arraylist_language.append("Uyghur");
-arraylist_language.append("Uzbek");
-arraylist_language.append("Vietnamese");
-arraylist_language.append("Welsh");
-arraylist_language.append("Xhosa");
-arraylist_language.append("Yiddish");
-arraylist_language.append("Yoruba");
-arraylist_language.append("Zulu");
-
-map_code_of_language = dict(zip(arraylist_language, arraylist_language_code))
-map_language_of_code = dict(zip(arraylist_language_code, arraylist_language))
-
-arraylist_subtitle_format = []
-arraylist_subtitle_format.append("srt");
-arraylist_subtitle_format.append("vtt");
-arraylist_subtitle_format.append("json");
-arraylist_subtitle_format.append("raw");
+from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \
+    SubtitleFormatter,  SubtitleWriter, \
+    stop_ffmpeg_windows, stop_ffmpeg_linux, remove_temp_files, is_same_language, is_video_file, is_audio_file
 
 
-#------------------------------------------------------------MISC FUNCTIONS------------------------------------------------------------#
+def show_progress(media_filepath, progress):
+    global main_window
+    file_display_name = os.path.basename(media_filepath).split('/')[-1]
+    info = 'Converting {} to a temporary WAV file'.format(file_display_name)
+    total = 100
+    percentage = f'{int(progress*100/100)}%'
+    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
 
 
-def srt_formatter(subtitles, padding_before=0, padding_after=0):
-    '''
-    Serialize a list of subtitles according to the SRT format, with optional time padding.
-    '''
-    sub_rip_file = pysrt.SubRipFile()
-    for i, ((start, end), text) in enumerate(subtitles, start=1):
-        item = pysrt.SubRipItem()
-        item.index = i
-        item.text = six.text_type(text)
-        item.start.seconds = max(0, start - padding_before)
-        item.end.seconds = end + padding_after
-        sub_rip_file.append(item)
-    return '\n'.join(six.text_type(item) for item in sub_rip_file)
+def show_error_messages(messages):
+    global main_window, not_transcribing
+    not_transcribing = True
+    main_window.write_event_value("-EXCEPTION-", messages)
 
 
-def vtt_formatter(subtitles, padding_before=0, padding_after=0):
-    '''
-    Serialize a list of subtitles according to the VTT format, with optional time padding.
-    '''
-    text = srt_formatter(subtitles, padding_before, padding_after)
-    text = 'WEBVTT\n\n' + text.replace(',', '.')
-    return text
-
-
-def json_formatter(subtitles):
-    '''
-    Serialize a list of subtitles as a JSON blob.
-    '''
-    subtitle_dicts = [
-        {
-            'start': start,
-            'end': end,
-            'content': text,
-        }
-        for ((start, end), text)
-        in subtitles
-    ]
-    return json.dumps(subtitle_dicts)
-
-
-def raw_formatter(subtitles):
-    '''
-    Serialize a list of subtitles as a newline-delimited string.
-    '''
-    return ' '.join(text for (_rng, text) in subtitles)
-
-
-FORMATTERS = {
-    'srt': srt_formatter,
-    'vtt': vtt_formatter,
-    'json': json_formatter,
-    'raw': raw_formatter,
-}
-
-video_file_types = [
-    ('MP4 Files', '*.mp4'),
-]
-
-
-def percentile(arr, percent):
-    arr = sorted(arr)
-    k = (len(arr) - 1) * percent
-    f = math.floor(k)
-    c = math.ceil(k)
-    if f == c: return arr[int(k)]
-    d0 = arr[int(f)] * (c - k)
-    d1 = arr[int(c)] * (k - f)
-    return d0 + d1
-
-
-def is_same_language(lang1, lang2):
-    return lang1.split("-")[0] == lang2.split("-")[0]
-
-
-class FLACConverter(object):
-    def __init__(self, source_path, include_before=0.25, include_after=0.25):
-        self.source_path = source_path
-        self.include_before = include_before
-        self.include_after = include_after
-
-    def __call__(self, region):
-        try:
-            start, end = region
-            start = max(0, start - self.include_before)
-            end += self.include_after
-            temp = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
-            command = ["ffmpeg","-ss", str(start), "-t", str(end - start), "-y", "-i", self.source_path, "-loglevel", "-1", temp.name]
-            if sys.platform == "win32":
-                subprocess.check_output(command, stdin=open(os.devnull), creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                subprocess.check_output(command, stdin=open(os.devnull))
-
-            return temp.read()
-
-        except KeyboardInterrupt:
-            return
-
-        except Exception as e:
-            not_transcribing = True
-            sg.Popup(e, title="Info")
-            #main_window.write_event_value('-EXCEPTION-', e)
-
-
-class SpeechRecognizer(object):
-    def __init__(self, language="en", rate=44100, retries=3, api_key=GOOGLE_SPEECH_API_KEY):
-        self.language = language
-        self.rate = rate
-        self.api_key = api_key
-        self.retries = retries
-
-    def __call__(self, data):
-        try:
-            for i in range(self.retries):
-                url = GOOGLE_SPEECH_API_URL.format(lang=self.language, key=self.api_key)
-                headers = {"Content-Type": "audio/x-flac rate=%d" % self.rate}
-
-                try:
-                    resp = requests.post(url, data=data, headers=headers)
-                except requests.exceptions.ConnectionError:
-                    continue
-
-                for line in resp.content.decode('utf-8').split("\n"):
-                    try:
-                        line = json.loads(line)
-                        line = line['result'][0]['alternative'][0]['transcript']
-                        return line[:1].upper() + line[1:]
-                    except:
-                        # no result
-                        continue
-
-        except KeyboardInterrupt:
-            return
-
-        except Exception as e:
-            not_transcribing = True
-            #sg.Popup(e, title="Info")
-            main_window.write_event_value('-EXCEPTION-', e)
-
-
-def which(program):
-    '''
-    Return the path for a given executable.
-    '''
-    def is_exe(file_path):
-        '''
-        Checks whether a file is executable.
-        '''
-        return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
-
-    fpath, _ = os.path.split(program)
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for path in os.environ["PATH"].split(os.pathsep):
-            path = path.strip('"')
-            exe_file = os.path.join(path, program)
-            if is_exe(exe_file):
-                return exe_file
-    return None
-
-
-def ffmpeg_check():
-    '''
-    Return the ffmpeg executable name. "None" returned when no executable exists.
-    '''
-    if which("ffmpeg"):
-        return "ffmpeg"
-    if which("ffmpeg.exe"):
-        return "ffmpeg.exe"
-    return None
-
-
-def extract_audio(filename, main_window, channels=1, rate=16000):
-    global not_transcribing
+# RUN A THREAD FOR EACH MEDIA FILE IN PARALEL
+def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepaths):
+    global thread_transcribe, not_transcribing, pool, main_window, completed_tasks
 
     if not_transcribing: return
 
-    temp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
-
-    if not os.path.isfile(filename):
-        #print("The given file does not exist: {0}".format(filename))
-        #raise Exception("Invalid filepath: {0}".format(filename))
-        not_transcribing=True
-        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-        #main_window['-OUTPUT-MESSAGES-'].update('The given file does not exist: {0}".format(filename)')
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = "The given file does not exist: {0}".format(filename)
-        append_flag = False
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-    if not ffmpeg_check():
-        #print("ffmpeg: Executable not found on machine.")
-        #raise Exception("Dependency not found: ffmpeg")
-        not_transcribing=True
-        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-        #main_window['-OUTPUT-MESSAGES-'].update('ffmpeg executable not found on machine')
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = 'ffmpeg executable not found on machine'
-        append_flag = False
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-    #command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "-1", temp.name]
-    command = ["ffmpeg", "-y", "-i", filename, "-ac", str(channels), "-ar", str(rate), "-loglevel", "error", temp.name]
-    ff = FfmpegProgress(command)
-    file_display_name = os.path.basename(filename).split('/')[-1]
-
-    try:
-        for progress in ff.run_command_with_progress():
-            info = 'Converting {} to a temporary WAV file'.format(file_display_name)
-            total = 100
-            percentage = f'{int(progress*100/100)}%'
-            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, 100, percentage, progress))
-        main_window.write_event_value("-EVENT-UPDATE-PROGRESS-BAR-", (info, 100, '100%', 100))
-    except Exception as e:
-        not_transcribing = True
-        #sg.Popup(e, title="Info")
-        main_window.write_event_value('-EXCEPTION-', e)
-
-    if not_transcribing: return
-
-    if sys.platform == "win32":
-        subprocess.check_output(command, stdin=open(os.devnull), creationflags=subprocess.CREATE_NO_WINDOW)
-    else:
-        subprocess.check_output(command, stdin=open(os.devnull))
-
-    return temp.name, rate
-
-
-#def find_speech_regions(filename, frame_width=4096, min_region_size=0.5, max_region_size=6):
-def find_speech_regions(filename, frame_width=4096, min_region_size=0.3, max_region_size=8):
-    global thread_transcribe, not_transcribing
-
-    if not_transcribing: return
-
-    try:
-        reader = wave.open(filename)
-        sample_width = reader.getsampwidth()
-        rate = reader.getframerate()
-        n_channels = reader.getnchannels()
-    except Exception as e:
-        main_window.write_event_value('-EXCEPTION-', e)
-
-    total_duration = reader.getnframes() / rate
-    chunk_duration = float(frame_width) / rate
-    n_chunks = int(total_duration / chunk_duration)
-
-    if not_transcribing: return
-
-    energies = []
-    for i in range(n_chunks):
-
-        if not_transcribing: return
-
-        chunk = reader.readframes(frame_width)
-        energies.append(audioop.rms(chunk, sample_width * n_channels))
-
-    threshold = percentile(energies, 0.2)
-    elapsed_time = 0
-    regions = []
-    region_start = None
-
-    i=0
-    for energy in energies:
-
-        if not_transcribing: return
-
-        is_silence = energy <= threshold
-        max_exceeded = region_start and elapsed_time - region_start >= max_region_size
-        if (max_exceeded or is_silence) and region_start:
-            if elapsed_time - region_start >= min_region_size:
-                regions.append((region_start, elapsed_time))
-                region_start = None
-        elif (not region_start) and (not is_silence):
-            region_start = elapsed_time
-        elapsed_time += chunk_duration
-        i=i+1
-    return regions
-
-'''
-def GoogleTranslate(text, src, dst):
-    url = 'https://translate.googleapis.com/translate_a/'
-    params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
-    with httpx.Client(http2=True) as client:
-        client.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://translate.google.com',})
-        response = client.get(url+params)
-        #print('response.status_code = {}'.format(response.status_code))
-        if response.status_code == 200:
-            response_json = response.json()[0]
-            #print('response_json = {}'.format(response_json))
-            length = len(response_json)
-            #print('length = {}'.format(length))
-            translation = ''
-            for i in range(length):
-                #print("{} {}".format(i, response_json[i][0]))
-                translation = translation + response_json[i][0]
-            return translation
-        return
-'''
-
-def GoogleTranslate(text, src, dst):
-    url = 'https://translate.googleapis.com/translate_a/'
-    params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://translate.google.com',}
-    response = requests.get(url+params, headers=headers)
-    if response.status_code == 200:
-        response_json = response.json()[0]
-        length = len(response_json)
-        translation = ""
-        for i in range(length):
-            translation = translation + response_json[i][0]
-        return translation
-    return
-
-
-class SentenceTranslator(object):
-    def __init__(self, src, dst, patience=-1):
-        self.src = src
-        self.dst = dst
-        self.patience = patience
-
-    def __call__(self, sentence):
-        translated_sentence = []
-        # handle the special case: empty string.
-        if not sentence:
-            return None
-
-        translated_sentence = GoogleTranslate(sentence, src=self.src, dst=self.dst)
-
-        fail_to_translate = translated_sentence[-1] == '\n'
-        while fail_to_translate and patience:
-            translated_sentence = translator.translate(translated_sentence, src=self.src, dst=self.dst).text
-            if translated_sentence[-1] == '\n':
-                if patience == -1:
-                    continue
-                patience -= 1
-            else:
-                fail_to_translate = False
-        return translated_sentence
-
-
-def transcribe(src, dst, filename, subtitle_format, main_window):
-    global all_threads, thread_transcribe, not_transcribing, pool
-
-    if not_transcribing: return
-
-    pool = multiprocessing.Pool(10, initializer=NoConsoleProcess)
-    wav_filename = None
-    audio_rate = None
-    subtitle_file = None
-    translated_subtitle_file = None
-    file_display_name = os.path.basename(filename).split('/')[-1]
-    regions = None
-
-    if not_transcribing: return
-
-    window_key = '-OUTPUT-MESSAGES-'
+    window_key = '-PROGRESS-LOG-'
     msg = ''
     append_flag = False
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    window_key = '-OUTPUT-MESSAGES-'
+    window_key = '-RESULTS-'
+    msg = ''
+    append_flag = False
+    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+    if not_transcribing: return
+
+    language = Language()
+    wav_filepath = None
+    sample_rate = None
+
+    base, ext = os.path.splitext(media_filepath)
+    subtitle_filepath = "{base}.{format}".format(base=base, format=subtitle_format)
+    if os.path.isfile(subtitle_filepath): os.remove(subtitle_filepath)
+
+    if not is_same_language(src, dst, error_messages_callback=show_error_messages):
+        translated_subtitle_filepath = subtitle_filepath[ :-4] + '.translated.' + subtitle_format
+        if os.path.isfile(translated_subtitle_filepath): os.remove(translated_subtitle_filepath)
+
+    regions = None
+    file_display_name = os.path.basename(media_filepath).split('/')[-1]
+
+    window_key = '-PROGRESS-LOG-'
     msg = "Processing {} :\n".format(file_display_name)
     append_flag = True
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    window_key = '-OUTPUT-MESSAGES-'
+    window_key = '-PROGRESS-LOG-'
     msg = "Converting {} to a temporary WAV file...\n".format(file_display_name)
     append_flag = True
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
     try:
-        wav_filename, audio_rate = extract_audio(filename, main_window)
-    except:
+        wav_converter = WavConverter(progress_callback=show_progress, error_messages_callback=show_error_messages)
+        wav_filepath, sample_rate = wav_converter(media_filepath)
+    except Exception as e:
+        not_transcribing = True
+        main_window.write_event_value("-EXCEPTION-", e)
         return
-
-    window_key = '-OUTPUT-MESSAGES-'
-    msg = "{} converted WAV file is : {}\n".format(file_display_name, wav_filename)
-    append_flag = True
-    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
     if not_transcribing: return
 
-    window_key = '-OUTPUT-MESSAGES-'
+    window_key = '-PROGRESS-LOG-'
+    msg = "{} converted WAV file is : {}\n".format(file_display_name, wav_filepath)
+    append_flag = True
+    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+    window_key = '-PROGRESS-LOG-'
     msg = "Finding speech regions of {} WAV file...\n".format(file_display_name)
     append_flag = True
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
     try:
-        regions = find_speech_regions(wav_filename)
+        region_finder = SpeechRegionFinder(frame_width=4096, min_region_size=0.5, max_region_size=6, error_messages_callback=show_error_messages)
+        regions = region_finder(wav_filepath)
         num = len(regions)
-    except:
+    except Exception as e:
+        not_transcribing = True
+        main_window.write_event_value("-EXCEPTION-", e)
         return
 
-    window_key = '-OUTPUT-MESSAGES-'
+    window_key = '-PROGRESS-LOG-'
     msg = "{} speech regions found = {}\n".format(file_display_name, len(regions))
     append_flag = True
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    if not_transcribing: return
-
     try:
-        converter = FLACConverter(source_path=wav_filename)
-        recognizer = SpeechRecognizer(language=src, rate=audio_rate, api_key=GOOGLE_SPEECH_API_KEY)
-    except:
+        converter = FLACConverter(wav_filepath=wav_filepath, error_messages_callback=show_error_messages)
+        recognizer = SpeechRecognizer(language=src, rate=sample_rate, error_messages_callback=show_error_messages)
+    except Exception as e:
+        not_transcribing = True
+        main_window.write_event_value("-EXCEPTION-", e)
         return
 
     transcriptions = []
@@ -1036,186 +424,228 @@ def transcribe(src, dst, filename, subtitle_format, main_window):
     if not_transcribing: return
 
     if regions:
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = 'Converting {} speech regions to FLAC files...\n'.format(file_display_name)
-        append_flag = True
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-        extracted_regions = []
-        info = 'Converting {} speech regions to FLAC files'.format(file_display_name)
-        total = 100
-
-        for i, extracted_region in enumerate(pool.imap(converter, regions)):
-
-            if not_transcribing:
-                pool.close()
-                pool.join()
-                pool = None
-                return
-
-            extracted_regions.append(extracted_region)
-
-            progress = int(i*100/len(regions))
-            percentage = f'{progress}%'
-            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
-        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, "100%", total))
-
-        if not_transcribing: return
-
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = 'Creating {} transcriptions...\n'.format(file_display_name)
-        append_flag = True
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-        info = 'Creating {} transcriptions'.format(file_display_name)
-        total = 100
-
-        for i, transcription in enumerate(pool.imap(recognizer, extracted_regions)):
-
-            if not_transcribing:
-                pool.close()
-                pool.join()
-                pool = None
-                return
-            transcriptions.append(transcription)
-
-            progress = int(i*100/len(regions))
-            percentage = f'{progress}%'
-            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
-        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, "100%", total))
-
-        if not_transcribing: return
-
-        timed_subtitles = [(r, t) for r, t in zip(regions, transcriptions) if t]
-        formatter = FORMATTERS.get(subtitle_format)
-        formatted_subtitles = formatter(timed_subtitles)
-
-        base, ext = os.path.splitext(filename)
-        subtitle_file = "{base}.{format}".format(base=base, format=subtitle_format)
-
-        if not_transcribing: return
-
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = "Writing subtitle file for {}\n".format(file_display_name)
-        append_flag = True
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-        with open(subtitle_file, 'wb') as f:
-            f.write(formatted_subtitles.encode("utf-8"))
-            f.close()
-
-        with open(subtitle_file, 'a') as f:
-            f.write("\n")
-            f.close()
-
-        if not_transcribing: return
-
-        if (not is_same_language(src, dst)):
-            translated_subtitle_file = subtitle_file[ :-4] + '.translated.' + subtitle_format
-
-            if not_transcribing: return
-
-            created_regions = []
-            created_transcripts = []
-            for entry in timed_subtitles:
-                created_regions.append(entry[0])
-                created_transcripts.append(entry[1])
-
-            if not_transcribing: return
-
-            window_key = '-OUTPUT-MESSAGES-'
-            msg = 'Translating {} subtitles from {} ({}) to {} ({})...\n'.format(file_display_name, map_language_of_code[src], src, map_language_of_code[dst], dst)
+        try:
+            window_key = '-PROGRESS-LOG-'
+            msg = 'Converting {} speech regions to FLAC files...\n'.format(file_display_name)
             append_flag = True
             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-            info = 'Translating {} subtitles from {} ({}) to {} ({})'.format(file_display_name, map_language_of_code[src], src, map_language_of_code[dst], dst)
+            extracted_regions = []
+            info = 'Converting {} speech regions to FLAC files'.format(file_display_name)
             total = 100
-            transcript_translator = SentenceTranslator(src=src, dst=dst)
-            translated_transcriptions = []
 
-            for i, translated_transcription in enumerate(pool.imap(transcript_translator, created_transcripts)):
+            for i, extracted_region in enumerate(pool[media_filepath].imap(converter, regions)):
 
                 if not_transcribing:
-                    pool.close()
-                    pool.join()
-                    pool = None
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
                     return
 
-                translated_transcriptions.append(translated_transcription)
+                extracted_regions.append(extracted_region)
 
-                progress = int(i*100/len(timed_subtitles))
+                progress = int(i*100/len(regions))
                 percentage = f'{progress}%'
                 main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
             main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, "100%", total))
 
-            if not_transcribing: return
+            if not_transcribing:
+                if pool[media_filepath]:
+                    pool[media_filepath].terminate()
+                    pool[media_filepath].close()
+                    pool[media_filepath].join()
+                    pool[media_filepath] = None
+                return
 
-            timed_translated_subtitles = [(r, t) for r, t in zip(created_regions, translated_transcriptions) if t]
-            formatter = FORMATTERS.get(subtitle_format)
-            formatted_translated_subtitles = formatter(timed_translated_subtitles)
+            window_key = '-PROGRESS-LOG-'
+            msg = 'Creating {} transcriptions...\n'.format(file_display_name)
+            append_flag = True
+            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-            if not_transcribing: return
+            info = 'Creating {} transcriptions'.format(file_display_name)
+            total = 100
 
-            with open(translated_subtitle_file, 'wb') as f:
-                f.write(formatted_translated_subtitles.encode("utf-8"))
-            with open(translated_subtitle_file, 'a') as f:
-                f.write("\n")
+            for i, transcription in enumerate(pool[media_filepath].imap(recognizer, extracted_regions)):
 
-            if not_transcribing: return
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
 
-        window_key = '-OUTPUT-MESSAGES-'
-        msg = "{} subtitles file created at :\n  {}\n".format(file_display_name, subtitle_file)
-        append_flag = True
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+                transcriptions.append(transcription)
 
-        window_key = '-RESULTS-'
-        msg = "{}\n".format(subtitle_file)
-        append_flag = True
-        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+                progress = int(i*100/len(regions))
+                percentage = f'{progress}%'
+                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
+            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, "100%", total))
 
-        if (not is_same_language(src, dst)):
-            window_key = '-OUTPUT-MESSAGES-'
-            msg = "{} translated subtitles file created at :\n  {}\n" .format(file_display_name, translated_subtitle_file)
+            if not_transcribing:
+                if pool[media_filepath]:
+                    pool[media_filepath].terminate()
+                    pool[media_filepath].close()
+                    pool[media_filepath].join()
+                    pool[media_filepath] = None
+                return
+
+            window_key = '-PROGRESS-LOG-'
+            msg = "Writing subtitle file for {}\n".format(file_display_name)
+            append_flag = True
+            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+            writer = SubtitleWriter(regions, transcriptions, subtitle_format, error_messages_callback=show_error_messages)
+            writer.write(subtitle_filepath)
+
+            if not_transcribing:
+                if pool[media_filepath]:
+                    pool[media_filepath].terminate()
+                    pool[media_filepath].close()
+                    pool[media_filepath].join()
+                    pool[media_filepath] = None
+                return
+
+            if not is_same_language(src, dst, error_messages_callback=show_error_messages):
+                translated_subtitle_filepath = subtitle_filepath[ :-4] + '.translated.' + subtitle_format
+
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
+
+                timed_subtitles = writer.timed_subtitles
+
+                created_regions = []
+                created_transcripts = []
+                for entry in timed_subtitles:
+                    created_regions.append(entry[0])
+                    created_transcripts.append(entry[1])
+
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
+
+                window_key = '-PROGRESS-LOG-'
+                msg = 'Translating {} subtitles from {} ({}) to {} ({})...\n'.format(file_display_name, language.name_of_code[src], src, language.name_of_code[dst], dst)
+                append_flag = True
+                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                info = 'Translating {} subtitles from {} ({}) to {} ({})'.format(file_display_name, language.name_of_code[src], src, language.name_of_code[dst], dst)
+                total = 100
+
+                transcript_translator = SentenceTranslator(src=src, dst=dst, error_messages_callback=show_error_messages)
+                translated_transcriptions = []
+
+                for i, translated_transcription in enumerate(pool[media_filepath].imap(transcript_translator, created_transcripts)):
+
+                    if not_transcribing:
+                        if pool[media_filepath]:
+                            pool[media_filepath].terminate()
+                            pool[media_filepath].close()
+                            pool[media_filepath].join()
+                            pool[media_filepath] = None
+                        return
+
+                    translated_transcriptions.append(translated_transcription)
+
+                    progress = int(i*100/len(timed_subtitles))
+                    percentage = f'{progress}%'
+                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, percentage, progress))
+                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (info, total, "100%", total))
+
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
+
+                window_key = '-PROGRESS-LOG-'
+                msg = "Writing translated subtitle file for {}\n".format(file_display_name)
+                append_flag = True
+                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                translation_writer = SubtitleWriter(created_regions, translated_transcriptions, subtitle_format, error_messages_callback=show_error_messages)
+                translation_writer.write(translated_subtitle_filepath)
+
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
+
+            window_key = '-PROGRESS-LOG-'
+            msg = "{} subtitles file created at :\n  {}\n".format(file_display_name, subtitle_filepath)
             append_flag = True
             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
             window_key = '-RESULTS-'
-            msg = "{}\n\n" .format(translated_subtitle_file)
+            msg = "Results for {} :\n".format(file_display_name)
             append_flag = True
             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-        if not_transcribing: return
+            window_key = '-RESULTS-'
+            msg = "{}\n".format(subtitle_filepath)
+            append_flag = True
+            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    if len(all_threads) > 1:
-        for t in all_threads:
-            if t.is_alive():
-                all_tasks_completed = False
-            else:
-                all_tasks_completed = True
-                pool.close()
-                pool.join()
-                pool = None
-                t.join()
-                not_transcribing = True
-                main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-    else:
-        pool.close()
-        pool.join()
-        pool = None
-        not_transcribing = True
-        main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+            if not is_same_language(src, dst, error_messages_callback=show_error_messages):
+                window_key = '-PROGRESS-LOG-'
+                msg = "{} translated subtitles file created at :\n  {}\n" .format(file_display_name, translated_subtitle_filepath)
+                append_flag = True
+                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    #remove_temp_files("wav")
-    #remove_temp_files("flac")
-    #remove_temp_files("mp4")
+                window_key = '-RESULTS-'
+                msg = "{}\n\n" .format(translated_subtitle_filepath)
+                append_flag = True
+                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+            event.set()
+            completed_tasks += 1
+            main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
+        except Exception as e:
+            not_transcribing = True
+            main_window.write_event_value("-EXCEPTION-", e)
+            return
+
+        if pool[media_filepath]:
+            pool[media_filepath].close()
+            pool[media_filepath].join()
+            pool[media_filepath] = None
 
 
-def remove_temp_files(extension):
-    temp_dir = tempfile.gettempdir()
-    for root, dirs, files in os.walk(temp_dir):
-        for file in files:
-            if file.endswith("." + extension):
-                os.remove(os.path.join(root, file))
+def start_transcription(media_filepaths, src, dst, subtitle_format):
+    global pool, completed_tasks, main_window
+
+    n_media_filepaths = len(media_filepaths)
+    completion_events = {}  # Dictionary to store completion events
+    pool = {media_filepath: multiprocessing.Pool(16) for media_filepath in media_filepaths}
+
+    # Create completion events for each media file
+    for media_filepath in media_filepaths:
+        completion_events[media_filepath] = threading.Event()
+
+    for file in media_filepaths:
+        thread_transcribe = Thread(target=transcribe, args=(src, dst, file, subtitle_format, completion_events[media_filepath], n_media_filepaths), daemon=True)
+        thread_transcribe.start()
+
+    # Wait for all threads to complete
+    for completion_event in completion_events.values():
+        completion_event.wait()
 
 
 def stop_thread(thread):
@@ -1223,29 +653,18 @@ def stop_thread(thread):
     res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread.ident), exc)
     if res == 0:
         main_window.write_event_value("-EXCEPTION-", "nonexistent thread id")
-        raise ValueError("nonexistent thread id")
+        #raise ValueError("nonexistent thread id")
     elif res > 1:
         # '''if it returns a number greater than one, you're in trouble,
         # and you should call it again with exc=NULL to revert the effect'''
         ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
         main_window.write_event_value("-EXCEPTION-", "PyThreadState_SetAsyncExc failed")
-        raise SystemError("PyThreadState_SetAsyncExc failed")
-
-
-def pBar(count_value, total, prefix, main_window):
-    bar_length = 10
-    filled_up_Length = int(round(bar_length*count_value/(total)))
-    percentage = round(100.0 * count_value/(total),1)
-    #bar = '#' * filled_up_Length + '=' * (bar_length - filled_up_Length)
-    bar = '█' * filled_up_Length + '-' * (bar_length - filled_up_Length)
-    #text = str('%s[%s] %s%s\r' %(prefix, bar, int(percentage), '%'))
-    text = str('%s|%s| %s%s\r' %(prefix, bar, int(percentage), '%'))
-    main_window['-OUTPUT-MESSAGES-'].update(text, append = False)
+        #raise SystemError("PyThreadState_SetAsyncExc failed")
 
 
 def popup_yes_no(text, title=None):
     layout = [
-        [sg.Text(text)],
+        [sg.Text(text, size=(24,1))],
         [sg.Push(), sg.Button('Yes'), sg.Button('No')],
     ]
     return sg.Window(title if title else text, layout, resizable=True).read(close=True)
@@ -1256,17 +675,10 @@ def move_center(window):
     win_width, win_height = window.size
     x, y = (screen_width-win_width)//2, ((screen_height-win_height)//2) - 30
     window.move(x, y)
-
+    window.refresh()
 
 def get_clipboard_text():
-    try:
-        output = subprocess.check_output(['xclip', '-selection', 'clipboard', '-out'], stderr=subprocess.PIPE).decode()
-        if output:
-            return output.strip()
-        else:
-            return None
-    except subprocess.CalledProcessError:
-        return None
+    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out']).decode()
 
 
 def set_clipboard_text(text):
@@ -1287,6 +699,26 @@ def scroll_to_last_line(window, element):
     
     # Update the window to show the scroll position
     window.refresh()
+
+
+def set_right_click_menu(element, enabled):
+    if enabled:
+        #print("element = {}".format(element))
+        #print("enabled = {}".format(enabled))
+
+        if isinstance(element, sg.Input):
+            widget = element.Widget
+        elif isinstance(element, sg.Multiline):
+            widget = element.Widget
+
+        menu = tk.Menu(widget, tearoff=False)
+        menu.add_command(label="Copy", command=lambda: element.Widget.event_generate("<<Copy>>"))
+        menu.add_command(label="Paste", command=lambda: element.Widget.event_generate("<<Paste>>"))
+        widget.bind("<Button-3>", lambda event: menu.tk_popup(event.x_root, event.y_root))
+
+    else:
+        element.Widget.unbind("<Button-3>")
+        element.Widget.bind("<Button-3>", lambda x: None)
 
 
 class NoConsoleProcess(multiprocessing.Process):
@@ -1370,10 +802,10 @@ def is_valid_url(url):
         return False
 
 
-def record_streaming_windows(hls_url, filename):
+def record_streaming_windows(hls_url, media_filepath):
     global not_recording, main_window
 
-    ffmpeg_cmd = ['ffmpeg', '-y', '-i', hls_url,  '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov', '-fflags', 'nobuffer', filename]
+    ffmpeg_cmd = ['ffmpeg', '-y', '-i', hls_url,  '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov', '-fflags', 'nobuffer', media_filepath]
     process = subprocess.Popen(ffmpeg_cmd, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW)
     msg = "RECORDING"
     main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
@@ -1538,52 +970,64 @@ def stop_record_streaming_linux():
         if main_window: main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
 
 
-def stop_ffmpeg_windows():
+def update_media_file_list():
+    browsed_files = []
+    browsed_files += str(main_window['-INPUT-'].get()).split(';')
+    invalid_media_filepath = []
 
-    tasklist_output = subprocess.check_output(['tasklist'], creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
-    ffmpeg_pid = None
-    for line in tasklist_output.split('\n'):
-        if "ffmpeg" in line:
-            ffmpeg_pid = line.split()[1]
-            break
-    if ffmpeg_pid:
-        devnull = open(os.devnull, 'w')
-        #subprocess.Popen(['taskkill', '/F', '/T', '/PID', ffmpeg_pid], stdout=devnull, stderr=devnull, creationflags=subprocess.CREATE_NO_WINDOW)
-        subprocess.Popen(['taskkill', '/F', '/T', '/PID', ffmpeg_pid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    if browsed_files != ['']:
+        for arg in browsed_files:
+            if not os.sep in arg:
+                argpath = os.path.join(os.getcwd(),arg)
+            else:
+                argpath = arg
+            argpath = argpath.replace("\\", "/")
+            filepaths += glob(argpath)
+
+        for file in filepaths:
+            file = file.replace("\\", "/")
+            if os.path.isfile(file):
+                if file not in sg_listbox_values:
+                    if is_video_file(file, error_messages_callback=show_error_messages) or is_audio_file(file, error_messages_callback=show_error_messages):
+                        sg_listbox_values.append(file)
+                    else:
+                        invalid_media_filepath.append(file)
+            else:
+                not_exist_filepath.append(argpath)
+
+        if invalid_media_filepath:
+            if len(invalid_media_filepath) == 1:
+                msg = "{} is not a valid video or audio file".format(invalid_media_filepath)
+            else:
+                msg = "{} are not a valid video or audio file".format(invalid_media_filepath)
+            sg.Popup(msg, title="Info", line_width=50)
+
+        if not_exist_filepath:
+            if len(not_exist_filepath) == 1:
+                msg = "{} is not exist".format(not_exist_filepath)
+            else:
+                msg = "{} are not exist".format(not_exist_filepath)
+            sg.Popup(msg, title="Info", line_width=50)
+
+        main_window['-LIST-'].update(sg_listbox_values)
+
+        browsed_files = []
+        filepaths = []
+        invalid_media_filepath = []
+        not_exist_filepath = []
 
 
-def stop_ffmpeg_linux():
-
-    process_name = 'ffmpeg'
-    try:
-        output = subprocess.check_output(['ps', '-ef'])
-        pid = [line.split()[1] for line in output.decode('utf-8').split('\n') if process_name in line][0]
-        subprocess.call(['kill', '-9', str(pid)])
-        #print(f"{process_name} has been killed")
-    except IndexError:
-        #print(f"{process_name} is not running")
-        pass
-
-
-#--------------------------------------------------------------MAIN FUNCTIONS------------------------------------------------------------#
+#------------------------------------------------------------ MAIN FUNCTION ------------------------------------------------------------#
 
 
 def main():
-    global all_threads, thread_transcribe, not_transcribing, pool, not_recording, thread_record_streaming, main_window
+    global not_transcribing, thread_transcribe, thread_transcribe_starter, pool, completed_tasks, not_recording, thread_record_streaming, main_window
 
-    if sys.platform == "win32":
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        kernel32.GlobalLock.argtypes = [ctypes.wintypes.HGLOBAL]
-        kernel32.GlobalLock.restype = ctypes.wintypes.LPVOID
-        kernel32.GlobalSize.argtypes = [ctypes.wintypes.HGLOBAL]
-        kernel32.GlobalSize.restype = ctypes.c_size_t
-        user32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
-        user32.OpenClipboard.restype = ctypes.wintypes.BOOL
-        user32.CloseClipboard.argtypes = []
-        user32.CloseClipboard.restype = ctypes.wintypes.BOOL
-        user32.GetClipboardData.argtypes = [ctypes.wintypes.UINT]
-        user32.GetClipboardData.restype = ctypes.wintypes.HANDLE
+    video_file_types = [
+        ('MP4 Files', '*.mp4'),
+    ]
+
+    language = Language()
 
     if sys.platform == "win32":
         stop_ffmpeg_windows()
@@ -1612,181 +1056,217 @@ def main():
     saved_recorded_streaming_filename = None
 
     thread_transcribe = None
+    thread_transcribe_starter = None
+    completed_tasks = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('source_path', help="Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with space eg. \"file 1.mp4\" \"file 2.mp4\")", nargs='*', default='')
+    parser.add_argument('source_path', help="Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with a space character e.g. \"file 1.mp4\" \"file 2.mp4\")", nargs='*', default='')
 
     if last_selected_src:
-        parser.add_argument('-S', '--src-language', help="Spoken language", default=last_selected_src)
+        parser.add_argument('-S', '--src-language', help="Language code of the audio language spoken in video/audio source_path", default=last_selected_src)
     else:
-        parser.add_argument('-S', '--src-language', help="Spoken language", default="en")
+        parser.add_argument('-S', '--src-language', help="Language code of the audio language spoken in video/audio source_path", default="en")
 
     if last_selected_dst:
-        parser.add_argument('-D', '--dst-language', help="Desired language for translation", default=last_selected_dst)
+        parser.add_argument('-D', '--dst-language', help="Desired translation language code for the subtitles", default=last_selected_dst)
     else:
-        parser.add_argument('-D', '--dst-language', help="Desired language for translation", default="id")
+        parser.add_argument('-D', '--dst-language', help="Desired translation language code for the subtitles", default="id")
 
-    parser.add_argument('-ll', '--list-languages', help="List all available source/translation languages", action='store_true')
+    parser.add_argument('-ll', '--list-languages', help="List all supported languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
-    parser.add_argument('-lf', '--list-formats', help="List all available subtitle formats", action='store_true')
+    parser.add_argument('-lf', '--list-formats', help="List all supported subtitle formats", action='store_true')
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
     args = parser.parse_args()
 
     if args.list_formats:
         print("Supported subtitle formats :")
-        for subtitle_format in FORMATTERS.keys():
+        for subtitle_format in SubtitleFormatter.supported_formats:
             print("{format}".format(format=subtitle_format))
         parser.exit(0)
 
     if args.list_languages:
         print("Supported languages :")
-        for code, language in sorted(map_language_of_code.items()):
-            print("{code}\t{language}".format(code=code, language=language))
+        for code, language in sorted(language.name_of_code.items()):
+            print("%8s : %s" %(code, language))
         parser.exit(0)
 
-
-#------------------------------------------------------------- MAIN WINDOW -------------------------------------------------------------#
-
-
-    not_transcribing = True
-    filepath = None
     browsed_files = []
-    filelist = []
+    filepaths = []
     input_string = ''
-    subtitle_format = None
-    xmax,ymax=sg.Window.get_screen_size()
-    wsizex=int(0.75*xmax)
-    wsizey=int(0.4*ymax)
-    mlszx=int(0.1*wsizex)
-    mlszy=int(0.03*wsizey)
-    wx=int((xmax-wsizex)/2)
-    wy=int((ymax-wsizey)/2)
-
-    font=('Helvetica', 9)
-
-    layout = [
-                [
-                    sg.Text('Voice language', size=(18,1)),
-                    sg.Combo(list(map_code_of_language), default_value='English', enable_events=True, key='-SRC-')
-                ],
-                [
-                    sg.Text('Translation language', size=(18,1)),
-                    sg.Combo(list(map_code_of_language), default_value='Indonesian', enable_events=True, key='-DST-')
-                ],
-                [
-                    sg.Text('Subtitle format', size=(18,1)),
-                    sg.Combo(list(arraylist_subtitle_format), default_value='srt', enable_events=True, key='-SUBTITLE-FORMAT-')
-                ],
-                [
-                    sg.Text('URL', size=(18,1)), sg.Input(size=(12, 1), expand_x=True, expand_y=True, key='-URL-', enable_events=True, right_click_menu=['&Edit', ['&Paste',]]),
-                    sg.Button("Start Record Streaming", size=(24,1), key='-RECORD-STREAMING-')
-                ],
-                [
-                    sg.Text('Thread status', size=(18,1)),
-                    sg.Text('NOT RECORDING', size=(20, 1), background_color='green1', text_color='black', expand_x=True, expand_y=True, key='-RECORD-STREAMING-STATUS-'),
-                    sg.Text('Duration recorded', size=(16, 1)),
-                    sg.Text('0:00:00.000000', size=(6, 1), background_color='green1', text_color='black', expand_x=True, expand_y=True, key='-STREAMING-DURATION-RECORDED-'),
-                    sg.Text('', size=(8,1)),
-                    sg.Button("Save Recorded Streaming", size=(24,1), key='-SAVE-RECORDED-STREAMING-')
-
-                ],
-                [
-                    sg.Text("Browsed Files", size=(18,1)),
-                    sg.Input(key='-INPUT-', enable_events=True, size=(80,10), expand_x=True, expand_y=True,),
-                    sg.Text('', size=(12,1)),
-                ],
-                [
-                    sg.Text("File List", size=(18,1)),
-                    sg.Listbox(values=[], key='-LIST-', enable_events=True, size=(80,1), expand_x=True, select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED, expand_y=True, horizontal_scroll=True),
-                    sg.Column(
-                            [
-                                [sg.FilesBrowse("Add", size=(10,1), target='-INPUT-', file_types=(("All Files", "*.*"),), enable_events=True, key="-ADD-")],
-                                [sg.Button("Remove", key="-REMOVE-", size=(10,1), expand_x=True, expand_y=False,)],
-                                [sg.Button("Clear", key="-CLEAR-", size=(10,1), expand_x=True, expand_y=False,)],
-                            ],
-                            element_justification='c'
-                         )
-                ],
-                [sg.Text("Progress", key='-INFO-')],
-                [
-                    sg.ProgressBar(100, orientation='h', size=(88, 1), expand_x=True, expand_y=True, key='-PROGRESS-'),
-                    sg.Text("0%", size=(5,1), expand_x=True, expand_y=True, key='-PERCENTAGE-', justification='r')
-                ],
-                [sg.Text('Progress log')],
-                [sg.Multiline(size=(mlszx, mlszy), expand_x=True, expand_y=True, key='-OUTPUT-MESSAGES-')],
-                [sg.Text('Results')],
-                [sg.Multiline(size=(mlszx, 0.5*mlszy), expand_x=True, expand_y=True, key='-RESULTS-')],
-                [sg.Button('Start', expand_x=True, expand_y=True, key='-START-'),sg.Button('Exit', expand_x=True, expand_y=True)]
-            ]
-
-    main_window = sg.Window('PyAutoSRT-'+VERSION, layout, font=font, resizable=True, keep_on_top=True, finalize=True)
-    main_window['-SRC-'].block_focus()
-    FONT_TYPE = "Arial"
-    FONT_SIZE = 9
-    sg.set_options(font=(FONT_TYPE, FONT_SIZE))
+    sg_listbox_values = []
+    invalid_media_filepath = []
+    not_exist_filepath = []
 
     if args.source_path:
+
         if "*" in str(args.source_path) or len(args.source_path)>1:
+
             for arg in args.source_path:
-                filelist += glob(arg)
-            for file in filelist:
-                if os.path.isfile(file):
-                    filepath = os.path.join(os.getcwd(), file)
-                    input_string = input_string + filepath + ";"
-                    main_window['-INPUT-'].update(input_string)
+                if not os.sep in arg:
+                    argpath = os.path.join(os.getcwd(),arg)
                 else:
-                    filepath = None
-                    main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n')
+                    argpath = arg
+                argpath = argpath.replace("\\", "/")
+                filepaths += glob(argpath)
+
+            for file in filepaths:
+                file = file.replace("\\", "/")
+                if os.path.isfile(file):
+                    if is_video_file(file, error_messages_callback=show_error_messages) or is_audio_file(file, error_messages_callback=show_error_messages):
+                        sg_listbox_values.append(file)
+                        input_string = input_string + file + ";"
+
+                    else:
+                        invalid_media_filepath.append(file)
+
+                else:
+                    not_exist_filepath.append(file)
 
             input_string = input_string[:-1]
-            main_window['-INPUT-'].update(input_string)
 
         else:
+
             if not os.sep in args.source_path[0]:
                 filepath = os.path.join(os.getcwd(),args.source_path[0])
             else:
                 filepath = args.source_path[0]
+            filepath = filepath.replace("\\", "/")
 
             if os.path.isfile(filepath):
-                main_window['-INPUT-'].update(filepath)
+                if is_video_file(filepath, error_messages_callback=show_error_messages) or is_audio_file(filepath, error_messages_callback=show_error_messages):
+                    sg_listbox_values.append(filepath)
+                    input_string = filepath
+
+                else:
+                    invalid_media_filepath.append(filepath)
+
             else:
-                main_window['-INPUT-'].update('')
-                main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n\n')
+                not_exist_filepath.append(filepath)
+
+        if invalid_media_filepath:
+            if len(invalid_media_filepath) == 1:
+                msg = "{} is not a valid video or audio file".format(invalid_media_filepath[0])
+            else:
+                msg = "{} are not a valid video or audio file".format(invalid_media_filepath)
+            sg.Popup(msg, title="Info", line_width=50)
+
+        if not_exist_filepath:
+            if len(not_exist_filepath) == 1:
+                msg = "{} is not exist".format(not_exist_filepath[0])
+            else:
+                msg = "{} are not exist".format(not_exist_filepath)
+            sg.Popup(msg, title="Info", line_width=50)
 
     if args.src_language:
-        if args.src_language not in map_language_of_code.keys():
-            main_window['-OUTPUT-MESSAGES-'].update('Source language you typed is not supported\nPlease select one from combobox\n\n', append=True)
-        elif args.src_language in map_language_of_code.keys():
+        if args.src_language not in language.name_of_code.keys():
+            msg = "Voice language you typed is not supported\nPlease select one from combobox"
+            show_error_messages(msg)
+        elif args.src_language in language.name_of_code.keys():
             src = args.src_language
-            main_window['-SRC-'].update(map_language_of_code[src])
+            sg_combo_src_values = language.name_of_code[src]
             last_selected_src = src
             src_file = open(src_filepath, "w")
             src_file.write(src)
             src_file.close()
 
     if args.dst_language:
-        if args.dst_language not in map_language_of_code.keys():
-            main_window['-OUTPUT-MESSAGES-'].update('Translation language you typed is not supported\nPlease select one from combobox\n\n', append=True)
-        elif args.dst_language in map_language_of_code.keys():
+        if args.dst_language not in language.name_of_code.keys():
+            msg = "Translation language you typed is not supported\nPlease select one from combobox"
+            show_error_messages(msg)
+        elif args.dst_language in language.name_of_code.keys():
             dst = args.dst_language
-            main_window['-DST-'].update(map_language_of_code[dst])
+            sg_combo_dst_values = language.name_of_code[dst]
             last_selected_dst = dst
             dst_file = open(dst_filepath, "w")
             dst_file.write(dst)
             dst_file.close()
 
     if args.format:
-        if args.format not in FORMATTERS.keys():
-            main_window['-OUTPUT-MESSAGES-'].update('Subtitle format you typed is not supported\nPlease select one from combobox', append=True)
+        if args.format not in SubtitleFormatter.supported_formats:
+            msg = "Subtitle format you typed is not supported\nPlease select one from combobox"
+            show_error_messages(msg)
         else:
             subtitle_format = args.format
-            main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
+            sg_combo_subtitle_format_values = subtitle_format
 
-    if not args.format:
-        subtitle_format = 'srt'
-        main_window['-SUBTITLE-FORMAT-'].update(subtitle_format)
 
+#------------------------------------------------------------- MAIN WINDOW -------------------------------------------------------------#
+
+
+    not_transcribing = True
+    subtitle_format = None
+    FONT=('Helvetica', 10)
+
+    layout = [
+                [
+                    sg.Text('Voice language', size=(18,1)),
+                    sg.Combo(list(language.code_of_name), default_value=sg_combo_src_values, enable_events=True, key='-SRC-')
+                ],
+                [
+                    sg.Text('Translation language', size=(18,1)),
+                    sg.Combo(list(language.code_of_name), default_value=sg_combo_dst_values, enable_events=True, key='-DST-')
+                ],
+                [
+                    sg.Text('Subtitle format', size=(18,1)),
+                    sg.Combo(list(SubtitleFormatter.supported_formats), default_value=sg_combo_subtitle_format_values, enable_events=True, key='-SUBTITLE-FORMAT-')
+                ],
+                [
+                    sg.Text('URL', size=(18,1)),
+                    sg.Input(size=(58, 1), expand_x=True, expand_y=True, key='-URL-', enable_events=True, right_click_menu=['&Edit', ['&Copy','&Paste',]]),
+                    sg.Button("Start Record Streaming", size=(22,1), key='-RECORD-STREAMING-')
+                ],
+                [
+                    sg.Text('Thread status', size=(18,1)),
+                    sg.Text('NOT RECORDING', size=(20, 1), background_color='green1', text_color='black', expand_x=True, expand_y=True, key='-RECORD-STREAMING-STATUS-'),
+                    sg.Text('Duration recorded', size=(16, 1)),
+                    sg.Text('0:00:00.000000', size=(14, 1), background_color='green1', text_color='black', expand_x=True, expand_y=True, key='-STREAMING-DURATION-RECORDED-'),
+                    sg.Text('', size=(8,1)),
+                    sg.Button("Save Recorded Streaming", size=(22,1), key='-SAVE-RECORDED-STREAMING-')
+
+                ],
+                [
+                    sg.Text("Browsed Files", size=(18,1)),
+                    sg.Input(input_string, size=(32,1), expand_x=True, expand_y=True, key='-INPUT-', enable_events=True, right_click_menu=['&Edit', ['&Copy','&Paste',]],),
+                    sg.Button("", size=(9,1), button_color=(sg.theme_background_color(), sg.theme_background_color()), border_width=0, key='-DUMMY-')
+                ],
+                [
+                    sg.Text("File List", size=(18,1)),
+                    sg.Listbox(sg_listbox_values, size=(32,1), expand_x=True, expand_y=True, key='-LIST-', enable_events=True, select_mode=sg.LISTBOX_SELECT_MODE_EXTENDED, horizontal_scroll=True),
+                    sg.Column(
+                                [
+                                    [sg.FilesBrowse("Add", size=(8,1), target='-INPUT-', file_types=(("All Files", "*.*"),), enable_events=True, key="-ADD-")],
+                                    [sg.Button("Remove", key="-REMOVE-", size=(8,1), expand_x=True, expand_y=False,)],
+                                    [sg.Button("Clear", key="-CLEAR-", size=(8,1), expand_x=True, expand_y=False,)],
+                                ],
+                                element_justification='c'
+                             )
+                ],
+                [sg.Text("Progress", key='-INFO-')],
+                [
+                    sg.ProgressBar(100, size=(66,1), orientation='h', expand_x=True, expand_y=True, key='-PROGRESS-'),
+                    sg.Text("100%", size=(4,1), expand_x=True, expand_y=True, key='-PERCENTAGE-', justification='r')
+                ],
+                [sg.Text('Progress log')],
+                [sg.Multiline(size=(70, 6), expand_x=True, expand_y=True, enable_events=True, right_click_menu=['&Edit', ['&Copy','&Paste',]], key='-PROGRESS-LOG-')],
+                [sg.Text('Results')],
+                [sg.Multiline(size=(70, 4), expand_x=True, expand_y=True, enable_events=True, right_click_menu=['&Edit', ['&Copy','&Paste',]], key='-RESULTS-')],
+                [sg.Button('Start', expand_x=True, expand_y=True, key='-START-'),sg.Button('Exit', expand_x=True, expand_y=True)]
+            ]
+
+    main_window = sg.Window('PyAutoSRT-'+VERSION, layout, font=FONT, resizable=True, keep_on_top=True, return_keyboard_events=True, finalize=True)
+    sg.set_options(font=FONT)
+    main_window['-SRC-'].block_focus()
+
+    main_window['-URL-'].bind("<FocusIn>", "FocusIn")
+    main_window['-PROGRESS-LOG-'].bind("<FocusIn>", "FocusIn")
+    main_window['-RESULTS-'].bind("<FocusIn>", "FocusIn")
+    main_window.bind("<Button-3>", "right_click")
+
+    browsed_files = []
+    filepaths = []
+    invalid_media_filepath = []
+    not_exist_filepath = []
 
     if (sys.platform == "win32"):
         main_window.TKroot.attributes('-topmost', True)
@@ -1796,23 +1276,13 @@ def main():
         main_window.TKroot.attributes('-topmost', 1)
         main_window.TKroot.attributes('-topmost', 0)
 
-    src_name = str(main_window['-SRC-'].get())
-    if src_name:
-        src = map_code_of_language[src_name]
-    else:
-        src_name = "English"
-        src = map_code_of_language[src_name]
+    src = language.code_of_name[str(main_window['-SRC-'].get())]
     last_selected_src = src
     src_file = open(src_filepath, "w")
     src_file.write(src)
     src_file.close()
 
-    dst_name = str(main_window['-DST-'].get())
-    if dst_name:
-        dst = map_code_of_language[dst_name]
-    else:
-        dst_name = "Indonesian"
-        dst = map_code_of_language[dst_name]
+    dst = language.code_of_name[str(main_window['-DST-'].get())]
     last_selected_dst = dst
     dst_file = open(dst_filepath, "w")
     dst_file.write(dst)
@@ -1825,52 +1295,162 @@ def main():
 
     saved_recorded_streaming_filename = None
 
+
 #-------------------------------------------------------------- MAIN LOOP -------------------------------------------------------------#
+
 
     move_center(main_window)
 
     while True:
+
         event, values = main_window.read()
 
-        src = map_code_of_language[str(main_window['-SRC-'].get())]
-        last_selected_src = src
-        src_file = open(src_filepath, "w")
-        src_file.write(src)
-        src_file.close()
+        if event == 'right_click':
 
-        dst = map_code_of_language[str(main_window['-DST-'].get())]
-        last_selected_dst = dst
-        dst_file = open(dst_filepath, "w")
-        dst_file.write(dst)
-        dst_file.close()
+            x, y = main_window.TKroot.winfo_pointerxy()
+            widget = main_window.TKroot.winfo_containing(x, y)
+            widget.focus_set()
 
 
-        if (event == 'Exit') or (event == sg.WIN_CLOSED):
+        if event == 'Copy':
+
+            key = main_window.find_element_with_focus().Key
+            widget = main_window[key].Widget
+            selected_text = None
+            try:
+                selected_text = widget.selection_get()
+            except:
+                pass
+            if sys.platform == "win32":
+                if selected_text:
+                    win32clipboard.OpenClipboard()
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardText(selected_text)
+                    win32clipboard.CloseClipboard()
+            elif sys.platform == "linux":
+                if selected_text:
+                    set_clipboard_text(selected_text)
+
+
+        elif event == 'Paste':
+
+            key = main_window.find_element_with_focus().Key
+            current_value = values[key]
+            text_elem = main_window[key]
+            element_type = type(text_elem)
+            strings = str(text_elem.Widget.index('insert'))
+            cursor_position_strings = ""
+            if "Input" in str(element_type):
+                cursor_position_strings = strings
+            elif "Multiline" in str(element_type):
+                cursor_position_strings = strings[2:]
+            cursor_position = int(cursor_position_strings)
+            if sys.platform == "win32":
+                win32clipboard.OpenClipboard()
+                clipboard_data = win32clipboard.GetClipboardData()
+            elif sys.platform == "linux":
+                clipboard_data = get_clipboard_text()
+            if clipboard_data:
+                new_value = current_value[:cursor_position] + clipboard_data + current_value[cursor_position:]
+                main_window[key].update(new_value)
+                cursor_position += len(clipboard_data)
+                if "Multiline" in str(element_type):
+                    text_elem.Widget.mark_set('insert', f'1.{cursor_position}')
+                    text_elem.Widget.see(f'1.{cursor_position}')
+                elif "Input" in str(element_type):
+                    text_elem.Widget.icursor(cursor_position)
+                    text_elem.Widget.xview_moveto(1.0)
+
+
+        if event == 'Exit' or event == sg.WIN_CLOSED:
 
             if not not_transcribing:
-                answer = popup_yes_no('             Are you sure?              ', title='Confirm')
+
+                answer = popup_yes_no('Are you sure?', title='Confirm')
+
                 if 'Yes' in answer:
+
+                    not_transcribing = True
+                    main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+
+                    if thread_transcribe and thread_transcribe.is_alive():
+                        stop_thread(thread_transcribe)
+
+                    if thread_transcribe_starter and thread_transcribe_starter.is_alive():
+                        stop_thread(thread_transcribe_starter)
+
+                    main_window['-PROGRESS-LOG-'].update("\n--- Canceling all tasks ---\n", append=True)
+                    scroll_to_last_line(main_window, main_window['-PROGRESS-LOG-'])
                     break
+
             else:
                 break
 
 
+        elif event == '-SRC-':
+
+            src = language.code_of_name[str(main_window['-SRC-'].get())]
+            last_selected_src = src
+            src_file = open(src_filepath, "w")
+            src_file.write(src)
+            src_file.close()
+
+
+        elif event == '-DST-':
+
+            dst = language.code_of_name[str(main_window['-DST-'].get())]
+            last_selected_dst = dst
+            dst_file = open(dst_filepath, "w")
+            dst_file.write(dst)
+            dst_file.close()
+
+
         elif event == '-INPUT-':
 
-            n = 0
-            browsed_files += values['-INPUT-'].split(';')
-            #print("browsed_files = {}".format(browsed_files))
+            browsed_files = []
+            browsed_files += str(main_window['-INPUT-'].get()).split(';')
+            invalid_media_filepath = []
 
             if browsed_files != ['']:
-                if len(filelist) == 0:
-                    filelist += browsed_files
-                else:
-                    for file in browsed_files:
-                        if file not in filelist and os.path.isfile(file):
-                            filelist.append(file)
+                for arg in browsed_files:
+                    if not os.sep in arg:
+                        argpath = os.path.join(os.getcwd(),arg)
+                    else:
+                        argpath = arg
+                    argpath = argpath.replace("\\", "/")
+                    filepaths += glob(argpath)
 
-            main_window['-LIST-'].update(filelist)
-            browsed_files = []
+                for file in filepaths:
+                    file = file.replace("\\", "/")
+                    if os.path.isfile(file):
+                        if file not in sg_listbox_values:
+                            if is_video_file(file, error_messages_callback=show_error_messages) or is_audio_file(file, error_messages_callback=show_error_messages):
+                                sg_listbox_values.append(file)
+                            else:
+                                invalid_media_filepath.append(file)
+                    else:
+                        not_exist_filepath.append(argpath)
+
+                if invalid_media_filepath:
+                    if len(invalid_media_filepath) == 1:
+                        msg = "{} is not a valid video or audio file".format(invalid_media_filepath[0])
+                    else:
+                        msg = "{} are not a valid video or audio file".format(invalid_media_filepath)
+                    sg.Popup(msg, title="Info", line_width=50)
+
+                if not_exist_filepath:
+                    if len(not_exist_filepath) == 1:
+                        msg = "{} is not exist".format(not_exist_filepath[0])
+                    else:
+                        msg = "{} are not exist".format(not_exist_filepath)
+                    sg.Popup(msg, title="Info", line_width=50)
+
+                main_window['-LIST-'].update(sg_listbox_values)
+
+                browsed_files = []
+                filepaths = []
+                invalid_media_filepath = []
+                not_exist_filepath = []
 
 
         elif event == '-REMOVE-':
@@ -1878,8 +1458,8 @@ def main():
             listbox_selection = values['-LIST-']
             if listbox_selection:
                 for index in listbox_selection[::-1]:
-                    filelist.remove(index)
-                main_window['-LIST-'].update(filelist)
+                    sg_listbox_values.remove(index)
+                main_window['-LIST-'].update(sg_listbox_values)
 
 
         elif event == 'Delete:46' and values['-LIST-']:
@@ -1887,119 +1467,98 @@ def main():
             listbox_selection = values['-LIST-']
             if listbox_selection:
                 for index in listbox_selection[::-1]:
-                    filelist.remove(index)
-                main_window['-LIST-'].update(filelist)
+                    sg_listbox_values.remove(index)
+                main_window['-LIST-'].update(sg_listbox_values)
 
 
         elif event == '-CLEAR-':
 
             main_window['-INPUT-'].update('')
-            filelist = []
-            main_window['-LIST-'].update(filelist)
-            main_window['-OUTPUT-MESSAGES-'].update('')
+            sg_listbox_values = []
+            browsed_files = []
+            main_window['-LIST-'].update(sg_listbox_values)
+            main_window['-PROGRESS-LOG-'].update('')
             main_window['-RESULTS-'].update('')
 
 
         elif event == '-START-':
 
-            src = map_code_of_language[str(main_window['-SRC-'].get())]
-            dst = map_code_of_language[str(main_window['-DST-'].get())]
-            #filelist += values['-INPUT-'].split(';')
+            src = language.code_of_name[str(main_window['-SRC-'].get())]
+            dst = language.code_of_name[str(main_window['-DST-'].get())]
             subtitle_format = values['-SUBTITLE-FORMAT-']
-            thread_transcribe = None
-            all_threads = []
             main_window['-RESULTS-'].update('', append=False)
 
-            if len(filelist)>0 and src and dst and subtitle_format:
+            # RUN A THREADS FOR EACH MEDIA FILES IN PARALEL
+            if len(sg_listbox_values)>0 and src and dst and subtitle_format:
                 not_transcribing = not not_transcribing
 
                 if not not_transcribing:
+                    completed_tasks = 0
+                    pool = None
                     main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-                    for file in filelist:
-                        if os.path.isfile(file):
-                            filepath = os.path.join(os.getcwd(), file)
-                            thread_transcribe = Thread(target=transcribe, args=(src, dst, filepath, subtitle_format, main_window), daemon=True)
-                            thread_transcribe.start()
-                            all_threads.append(thread_transcribe)
-                        else:
-                            filepath = None
-                            main_window['-OUTPUT-MESSAGES-'].update('File path you typed is not exist, please browse it\n\n')
+                    thread_transcribe_starter = Thread(target=start_transcription, args=(sg_listbox_values, src, dst, subtitle_format), daemon=True)
+                    thread_transcribe_starter.start()
 
                 else:
                     not_transcribing = not not_transcribing
-                    answer = popup_yes_no('             Are you sure?              ', title='Confirm')
+                    answer = popup_yes_no('Are you sure?', title='Confirm')
                     if 'Yes' in answer:
                         not_transcribing = True
                         main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-                        for t in all_threads:
-                            t.join()
-                        main_window['-OUTPUT-MESSAGES-'].update('', append=False)
-                        main_window['-OUTPUT-MESSAGES-'].update("All tasks has been canceled", append=False)
+
+                        if thread_transcribe and thread_transcribe.is_alive():
+                            stop_thread(thread_transcribe)
+
+                        if thread_transcribe_starter and thread_transcribe_starter.is_alive():
+                            stop_thread(thread_transcribe_starter)
+
+                        main_window['-PROGRESS-LOG-'].update("\n--- Canceling all tasks ---\n", append=True)
+                        scroll_to_last_line(main_window, main_window['-PROGRESS-LOG-'])
 
             else:
-                main_window['-OUTPUT-MESSAGES-'].update("You should pick a file first")
+                msg = "You should pick a file first"
+                sg.Popup(msg, title="Info", line_width=50)
 
 
         elif event == '-EVENT-TRANSCRIBE-MESSAGES-':
 
-            m = values[event]
-            window_key = m[0]
-            msg = m[1]
-            append_flag = m[2]
-            main_window[window_key].update(msg, append=append_flag)
-            scroll_to_last_line(main_window, main_window[window_key])
+            if not not_transcribing:
+                m = values[event]
+                window_key = m[0]
+                msg = m[1]
+                append_flag = m[2]
+                main_window[window_key].update(msg, append=append_flag)
+                scroll_to_last_line(main_window, main_window[window_key])
 
 
         elif event == '-EVENT-UPDATE-PROGRESS-BAR-':
 
-            pb = values[event]
-            info = pb[0]
-            total = pb[1]
-            percentage = pb[2]
-            progress = pb[3]
+            if not not_transcribing:
+                pb = values[event]
+                info = pb[0]
+                total = pb[1]
+                percentage = pb[2]
+                progress = pb[3]
 
-            main_window['-INFO-'].update(info)
-            main_window['-PERCENTAGE-'].update(percentage)
-            main_window['-PROGRESS-'].update(progress)
+                main_window['-INFO-'].update(info)
+                main_window['-PERCENTAGE-'].update(percentage)
+                main_window['-PROGRESS-'].update(progress)
+
+
+        elif event == '-EVENT-TRANSCRIBE-TASKS-COMPLETED-':
+
+            completed_tasks = values[event]
+            if completed_tasks == len(sg_listbox_values):
+                not_transcribing = True
+                main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
 
 
         elif event == '-EXCEPTION-':
 
             e = str(values[event]).strip()
-            #sg.Popup("File format is not supported", title="Info", line_width=50)
             sg.Popup(e, title="Info", line_width=50)
             main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-            main_window['-OUTPUT-MESSAGES-'].update('', append=False)
-
-
-        elif event.endswith('+R') and values['-URL-']:
-
-            if sys.platform == "win32":
-                user32.OpenClipboard(None)
-                clipboard_data = user32.GetClipboardData(1)  # 1 is CF_TEXT
-                if clipboard_data:
-                    data = ctypes.c_char_p(clipboard_data)
-                    main_window['-URL-'].update(data.value.decode('utf-8'))
-                user32.CloseClipboard()
-            elif sys.platform == "linux":
-                text = get_clipboard_text()
-                if text:
-                    main_window['-URL-'].update(text.strip())
-
-
-        elif event == 'Paste':
-
-            if sys.platform == "win32":
-                user32.OpenClipboard(None)
-                clipboard_data = user32.GetClipboardData(1)  # 1 is CF_TEXT
-                if clipboard_data:
-                    data = ctypes.c_char_p(clipboard_data)
-                    main_window['-URL-'].update(data.value.decode('utf-8'))
-                user32.CloseClipboard()
-            elif sys.platform == "linux":
-                text = get_clipboard_text()
-                if text:
-                    main_window['-URL-'].update(text.strip())
+            main_window['-PROGRESS-LOG-'].update('', append=False)
 
 
         elif event == '-EVENT-STREAMING-DURATION-RECORDED-':
@@ -2027,15 +1586,13 @@ def main():
                 is_valid_url_streaming = is_streaming_url(str(values['-URL-']).strip())
 
             if not is_valid_url_streaming:
-                sg.set_options(font=("Helvetica", 9))
-                sg.Popup('Invalid URL, please enter a valid URL.                   ', title="Info", line_width=50)
+                msg = "Invalid URL, please enter a valid URL"
+                sg.Popup(msg, title="Info", line_width=50)
                 main_window['-URL-'].update('')
 
             else:
                 not_recording = not not_recording
                 main_window['-RECORD-STREAMING-'].update(('Stop Record Streaming','Start Record Streaming')[not_recording], button_color=(('white', ('red', '#283b5b')[not_recording])))
-
-                #if tmp_recorded_streaming_filepath and os.path.isfile(tmp_recorded_streaming_filepath): os.remove(tmp_recorded_streaming_filepath)
 
                 if main_window['-URL-'].get() != (None or '') and not_recording == False:
 
@@ -2063,7 +1620,8 @@ def main():
                             thread_record_streaming.start()
 
                     else:
-                        sg.Popup('Invalid URL, please enter a valid URL.                   ', title="Info", line_width=50)
+                        msg = "Invalid URL, please enter a valid URL"
+                        sg.Popup(msg, title="Info", line_width=50)
                         not_recording = True
                         main_window['-RECORD-STREAMING-'].update(('Stop Record Streaming','Start Record Streaming')[not_recording], button_color=(('white', ('red', '#283b5b')[not_recording])))
 
@@ -2079,32 +1637,30 @@ def main():
 
         elif event == '-SAVE-RECORDED-STREAMING-':
 
-            '''
-            if not args.video_filename:
-                tmp_recorded_streaming_filename = "record.mp4"
-            else:
-                tmp_recorded_streaming_filename = args.video_filename
-            '''
-
             tmp_recorded_streaming_filename = "record.mp4"
             tmp_recorded_streaming_filepath = os.path.join(tempfile.gettempdir(), tmp_recorded_streaming_filename)
 
             if os.path.isfile(tmp_recorded_streaming_filepath):
 
-                saved_recorded_streaming_filename = sg.popup_get_file('', no_window=True, save_as=True, font=(FONT_TYPE, FONT_SIZE), default_path=saved_recorded_streaming_filename, file_types=video_file_types)
+                saved_recorded_streaming_filename = sg.popup_get_file('', no_window=True, save_as=True, font=FONT, default_path=saved_recorded_streaming_filename, file_types=video_file_types)
 
                 if saved_recorded_streaming_filename:
                     shutil.copy(tmp_recorded_streaming_filepath, saved_recorded_streaming_filename)
 
             else:
-                FONT_TYPE = "Helvetica"
-                FONT_SIZE = 9
-                sg.set_options(font=(FONT_TYPE, FONT_SIZE))
-                sg.Popup("No streaming was recorded.                             ", title="Info", line_width=50)
+                sg.set_options(font=FONT)
+                msg = "No streaming was recorded"
+                sg.Popup(msg, title="Info", line_width=50)
 
+
+        #print("event = {}".format(event))
+        #print("values = {}".format(values))
 
     if thread_transcribe and thread_transcribe.is_alive():
         stop_thread(thread_transcribe)
+
+    if thread_transcribe_starter and thread_transcribe_starter.is_alive():
+        stop_thread(thread_transcribe_starter)
 
     if sys.platform == "win32":
         stop_ffmpeg_windows()
@@ -2116,9 +1672,8 @@ def main():
     remove_temp_files("mp4")
 
     main_window.close()
-    sys.exit(0)
 
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    main()
+    sys.exit(main())
