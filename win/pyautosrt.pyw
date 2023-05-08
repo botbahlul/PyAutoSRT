@@ -1370,7 +1370,7 @@ class SRTFileReader:
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-VERSION = "0.1.16"
+VERSION = "0.1.17"
 
 '''
 from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \
@@ -1739,11 +1739,19 @@ def move_center(window):
     window.refresh()
 
 def get_clipboard_text():
-    return subprocess.check_output(['xclip', '-selection', 'clipboard', '-out']).decode()
+    try:
+        clipboard_data = subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], universal_newlines=True)
+        return clipboard_data.strip()
+    except subprocess.CalledProcessError:
+        # Handle the case when clipboard is empty or unsupported
+        return None
 
 
 def set_clipboard_text(text):
-    subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode())
+    try:
+        subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode())
+    except subprocess.CalledProcessError as e:
+        show_error_messages(e)
 
 
 def scroll_to_last_line(window, element):
@@ -2406,11 +2414,19 @@ def main():
             elif "Multiline" in str(element_type):
                 cursor_position_strings = strings[2:]
             cursor_position = int(cursor_position_strings)
+            clipboard_data = None
             if sys.platform == "win32":
-                win32clipboard.OpenClipboard()
-                clipboard_data = win32clipboard.GetClipboardData()
+                try:
+                    win32clipboard.OpenClipboard()
+                    clipboard_data = win32clipboard.GetClipboardData()
+                except Exception as e:
+                    #show_error_messages(e)
+                    pass
             elif sys.platform == "linux":
-                clipboard_data = get_clipboard_text()
+                try:
+                    clipboard_data = get_clipboard_text()
+                except:
+                    pass
             if clipboard_data:
                 new_value = current_value[:cursor_position] + clipboard_data + current_value[cursor_position:]
                 main_window[key].update(new_value)
