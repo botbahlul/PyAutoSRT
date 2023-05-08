@@ -310,7 +310,7 @@ class FfmpegProgress:
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-VERSION = "0.1.15"
+VERSION = "0.1.16"
 
 
 from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \
@@ -335,7 +335,7 @@ def show_error_messages(messages):
 
 # RUN A THREAD FOR EACH MEDIA FILE IN PARALEL
 def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepaths):
-    global thread_transcribe, not_transcribing, pool, main_window, completed_tasks
+    global thread_transcribe, thread_transcribe_starter, not_transcribing, pool, main_window, completed_tasks
 
     if not_transcribing: return
 
@@ -629,11 +629,11 @@ def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepat
 
 
 def start_transcription(media_filepaths, src, dst, subtitle_format):
-    global pool, completed_tasks, main_window
+    global pool, thread_transcribe, thread_transcribe_starter, completed_tasks, main_window
 
     n_media_filepaths = len(media_filepaths)
     completion_events = {}  # Dictionary to store completion events
-    pool = {media_filepath: multiprocessing.Pool(16) for media_filepath in media_filepaths}
+    pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in media_filepaths}
 
     # Create completion events for each media file
     for media_filepath in media_filepaths:
