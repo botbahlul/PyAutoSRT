@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.8
 from __future__ import unicode_literals
-import sys
+import platform
 from pyautosrt import VERSION
 try:
     from setuptools import setup, find_packages
@@ -25,10 +25,9 @@ install_requires=[
     "httpx>=0.13.3",
     "streamlink>=5.3.1",
     "urllib3 >=1.26.0,<2.0",
-    "autosrt >=1.2.11",
 ]
 
-if sys.platform == "win32":
+if platform.system == "Windows":
     install_requires.append("pywin32>=306")
 
 setup(
