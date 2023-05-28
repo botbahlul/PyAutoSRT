@@ -4,7 +4,6 @@ $url crunchyroll.com
 $type vod
 """
 
-import datetime
 import logging
 import re
 from uuid import uuid4
@@ -12,6 +11,7 @@ from uuid import uuid4
 from streamlink.plugin import Plugin, PluginError, pluginargument, pluginmatcher
 from streamlink.plugin.api import validate
 from streamlink.stream.hls import HLSStream
+from streamlink.utils.times import parse_datetime
 
 
 log = logging.getLogger(__name__)
@@ -27,15 +27,6 @@ STREAM_NAMES = {
     "328k": "mid",
     "864k": "high",
 }
-
-
-def parse_timestamp(ts):
-    """Takes ISO 8601 format(string) and converts into a utc datetime(naive)"""
-    return (
-        datetime.datetime.strptime(ts[:-7], "%Y-%m-%dT%H:%M:%S")
-        + datetime.timedelta(hours=int(ts[-5:-3]), minutes=int(ts[-2:]))
-        * int(f"{ts[-6:-5]}1")
-    )
 
 
 _api_schema = validate.Schema({
@@ -70,7 +61,7 @@ _login_schema = validate.Schema({
     "auth": validate.any(str, None),
     "expires": validate.all(
         str,
-        validate.transform(parse_timestamp),
+        validate.transform(parse_datetime),
     ),
     "user": {
         "username": validate.any(str, None),
@@ -324,7 +315,7 @@ class Crunchyroll(Plugin):
             info = api.get_info(media_id, fields=["media.name", "media.series_name",
                                 "media.media_type", "media.stream_data"], schema=_media_schema)
         except CrunchyrollAPIError as err:
-            raise PluginError(f"Media lookup error: {err.msg}")
+            raise PluginError(f"Media lookup error: {err.msg}") from err
 
         if not info:
             return
@@ -399,7 +390,7 @@ class Crunchyroll(Plugin):
                     log.info(f"Logged in as '{login_name}'")
 
                 except CrunchyrollAPIError as err:
-                    raise PluginError(f"Authentication error: {err.msg}")
+                    raise PluginError(f"Authentication error: {err.msg}") from err
             if not api.auth:
                 log.warning("No authentication provided, you won't be able to access premium restricted content")
 
