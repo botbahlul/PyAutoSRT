@@ -395,12 +395,12 @@ def is_same_language(src, dst, error_messages_callback=None):
 
 def check_file_type(file_path, error_messages_callback=None):
     try:
-        ffprobe_cmd = ['ffprobe', '-v', '-1', '-show_format', '-show_streams', '-print_format', 'json', file_path]
+        ffprobe_cmd = ['ffprobe', '-v', '-error', '-show_format', '-show_streams', '-print_format', 'json', file_path]
         output = None
         if sys.platform == "win32":
-            output = subprocess.check_output(ffprobe_cmd, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
         else:
-            output = subprocess.check_output(ffprobe_cmd).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE).decode('utf-8')
         data = json.loads(output)
 
         if 'streams' in data:
@@ -1373,7 +1373,7 @@ class SRTFileReader:
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-VERSION = "0.1.18"
+VERSION = "0.1.19"
 
 '''
 from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \
