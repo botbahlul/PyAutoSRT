@@ -1373,7 +1373,7 @@ class SRTFileReader:
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-VERSION = "0.1.18"
+VERSION = "0.1.19"
 
 '''
 from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \

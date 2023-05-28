@@ -19,12 +19,12 @@ long_description = (
 
 install_requires=[
     "requests>=2.3.0",
+    "httpx>=0.13.3",
     "pysrt>=1.0.1",
     "six>=1.11.0",
     "pysimplegui>=4.60.1",
-    "httpx>=0.13.3",
     "streamlink>=5.3.1",
-    "urllib3 >=1.26.0,<2.0",
+    "urllib3>=1.26.0,<3.0",
 ]
 
 if platform.system == "Windows":
