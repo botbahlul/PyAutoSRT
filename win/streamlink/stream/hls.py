@@ -2,6 +2,7 @@ import logging
 import re
 import struct
 from concurrent.futures import Future
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 from urllib.parse import urlparse
 
@@ -11,7 +12,7 @@ from Crypto.Cipher import AES
 # noinspection PyPackageRequirements
 from Crypto.Util.Padding import unpad
 from requests import Response
-from requests.exceptions import ChunkedEncodingError, ConnectionError, ContentDecodingError
+from requests.exceptions import ChunkedEncodingError, ConnectionError, ContentDecodingError, InvalidSchema
 
 from streamlink.buffers import RingBuffer
 from streamlink.exceptions import StreamError
@@ -22,6 +23,7 @@ from streamlink.stream.http import HTTPStream
 from streamlink.stream.segmented import SegmentedStreamReader, SegmentedStreamWorker, SegmentedStreamWriter
 from streamlink.utils.cache import LRUCache
 from streamlink.utils.formatter import Formatter
+from streamlink.utils.times import now
 
 
 log = logging.getLogger(__name__)
@@ -112,12 +114,20 @@ class HLSStreamWriter(SegmentedStreamWriter):
             key_uri = formatter.format(self.key_uri_override)
 
         if key_uri and self.key_uri != key_uri:
-            res = self.session.http.get(
-                key_uri,
-                exception=StreamError,
-                retries=self.retries,
-                **self.reader.request_params,
-            )
+            try:
+                res = self.session.http.get(
+                    key_uri,
+                    exception=StreamError,
+                    retries=self.retries,
+                    **self.reader.request_params,
+                )
+            except StreamError as err:
+                # FIXME: fix HTTPSession.request()
+                original_error = getattr(err, "err", None)
+                if isinstance(original_error, InvalidSchema):
+                    raise StreamError(f"Unable to find connection adapter for key URI: {key_uri}") from original_error
+                raise  # pragma: no cover
+
             res.encoding = "binary/octet-stream"
             self.key_data = res.content
             self.key_uri = key_uri
@@ -289,6 +299,7 @@ class HLSStreamWorker(SegmentedStreamWorker):
         self.playlist_end: Optional[int] = None
         self.playlist_sequence: int = -1
         self.playlist_sequences: List[Sequence] = []
+        self.playlist_reload_last: datetime = now()
         self.playlist_reload_time: float = 6
         self.playlist_reload_time_override = self.session.options.get("hls-playlist-reload-time")
         self.playlist_reload_retries = self.session.options.get("hls-playlist-reload-attempts")
@@ -330,7 +341,7 @@ class HLSStreamWorker(SegmentedStreamWorker):
         try:
             playlist = self._reload_playlist(res)
         except ValueError as err:
-            raise StreamError(err)
+            raise StreamError(err) from err
 
         if playlist.is_master:
             raise StreamError(f"Attempted to play a variant playlist, use 'hls://{self.stream.url}' instead")
@@ -404,6 +415,7 @@ class HLSStreamWorker(SegmentedStreamWorker):
         return default
 
     def iter_segments(self):
+        self.playlist_reload_last = now()
         try:
             self.reload_playlist()
         except StreamError as err:
@@ -443,13 +455,26 @@ class HLSStreamWorker(SegmentedStreamWorker):
                     return
 
                 # End of stream
-                stream_end = self.playlist_end and sequence.num >= self.playlist_end
+                stream_end = self.playlist_end is not None and sequence.num >= self.playlist_end
                 if self.closed or stream_end:
                     return
 
                 self.playlist_sequence = sequence.num + 1
 
-            if self.wait(self.playlist_reload_time):
+            # Exclude playlist fetch+processing time from the overall playlist reload time
+            # and reload playlist in a strict time interval
+            time_completed = now()
+            time_elapsed = max(0.0, (time_completed - self.playlist_reload_last).total_seconds())
+            time_wait = max(0.0, self.playlist_reload_time - time_elapsed)
+            if self.wait(time_wait):
+                if time_wait > 0:
+                    # If we had to wait, then don't call now() twice and instead reference the timestamp from before
+                    # the wait() call, to prevent a shifting time offset due to the execution time.
+                    self.playlist_reload_last = time_completed + timedelta(seconds=time_wait)
+                else:
+                    # Otherwise, get the current time, as the reload interval already has shifted.
+                    self.playlist_reload_last = now()
+
                 try:
                     self.reload_playlist()
                 except StreamError as err:
@@ -476,7 +501,7 @@ class HLSStreamReader(FilteredStream, SegmentedStreamReader):
         super().__init__(stream)
 
 
-class MuxedHLSStream(MuxedStream):
+class MuxedHLSStream(MuxedStream["HLSStream"]):
     """
     Muxes multiple HLS video and audio streams into one output stream.
     """
@@ -656,7 +681,7 @@ class HLSStream(HTTPStream):
         try:
             multivariant = cls._get_variant_playlist(res)
         except ValueError as err:
-            raise OSError(f"Failed to parse playlist: {err}")
+            raise OSError(f"Failed to parse playlist: {err}") from err
 
         stream_name: Optional[str]
         stream: Union["HLSStream", "MuxedHLSStream"]
