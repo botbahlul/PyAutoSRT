@@ -6,13 +6,13 @@ from socket import AF_INET, AF_INET6
 from typing import Any, Callable, ClassVar, Dict, Iterator, Mapping, Optional, Tuple, Type
 
 import urllib3.util.connection as urllib3_util_connection
-import urllib3.util.ssl_ as urllib3_util_ssl
+from requests.adapters import HTTPAdapter
 
 from streamlink import __version__, plugins
 from streamlink.exceptions import NoPluginError, PluginError, StreamlinkDeprecationWarning
 from streamlink.logger import StreamlinkLogger
 from streamlink.options import Options
-from streamlink.plugin.api.http_session import HTTPSession
+from streamlink.plugin.api.http_session import HTTPSession, TLSNoDHAdapter
 from streamlink.plugin.plugin import NO_PRIORITY, NORMAL_PRIORITY, Matcher, Plugin
 from streamlink.utils.l10n import Localization
 from streamlink.utils.module import load_module
@@ -25,6 +25,21 @@ log = logging.getLogger(__name__)
 
 
 _original_allowed_gai_family = urllib3_util_connection.allowed_gai_family  # type: ignore[attr-defined]
+
+
+def _get_deprecation_stacklevel_offset():
+    """Deal with stacklevels of both session.{g,s}et_option() and session.options.{g,s}et() calls"""
+    from inspect import currentframe
+
+    frame = currentframe().f_back.f_back
+    offset = 0
+    while frame:
+        if frame.f_code.co_filename == __file__ and frame.f_code.co_name in ("set_option", "get_option"):
+            offset += 1
+            break
+        frame = frame.f_back
+
+    return offset
 
 
 class PythonDeprecatedWarning(UserWarning):
@@ -47,14 +62,19 @@ class StreamlinkOptions(Options):
             except ValueError:
                 continue
 
-    # ---- getters
-
-    def _get_http_proxy(self, key):
+    @staticmethod
+    def _deprecate_https_proxy(key: str) -> None:
         if key == "https-proxy":
             warnings.warn(
                 "The `https-proxy` option has been deprecated in favor of a single `http-proxy` option",
                 StreamlinkDeprecationWarning,
+                stacklevel=4 + _get_deprecation_stacklevel_offset(),
             )
+
+    # ---- getters
+
+    def _get_http_proxy(self, key):
+        self._deprecate_https_proxy(key)
         return self.session.http.proxies.get("https" if key == "https-proxy" else "http")
 
     def _get_http_attr(self, key):
@@ -88,25 +108,19 @@ class StreamlinkOptions(Options):
         self.session.http.proxies["http"] \
             = self.session.http.proxies["https"] \
             = update_scheme("https://", value, force=False)
-        if key == "https-proxy":
-            warnings.warn(
-                "The `https-proxy` option has been deprecated in favor of a single `http-proxy` option",
-                StreamlinkDeprecationWarning,
-            )
+        self._deprecate_https_proxy(key)
 
     def _set_http_attr(self, key, value):
         setattr(self.session.http, self._OPTIONS_HTTP_ATTRS[key], value)
 
     def _set_http_disable_dh(self, key, value):
         self.set_explicit(key, value)
-        default_ciphers = [
-            item
-            for item in urllib3_util_ssl.DEFAULT_CIPHERS.split(":")  # type: ignore[attr-defined]
-            if item != "!DH"
-        ]
         if value:
-            default_ciphers.append("!DH")
-        urllib3_util_ssl.DEFAULT_CIPHERS = ":".join(default_ciphers)  # type: ignore[attr-defined]
+            adapter = TLSNoDHAdapter()
+        else:
+            adapter = HTTPAdapter()
+
+        self.session.http.mount("https://", adapter)
 
     @staticmethod
     def _factory_set_http_attr_key_equals_value(delimiter: str) -> Callable[["StreamlinkOptions", str, Any], None]:
@@ -124,6 +138,7 @@ class StreamlinkOptions(Options):
             warnings.warn(
                 f"`{key}` has been deprecated in favor of the `{name}` option",
                 StreamlinkDeprecationWarning,
+                stacklevel=3 + _get_deprecation_stacklevel_offset(),
             )
 
         return inner
@@ -224,6 +239,7 @@ class Streamlink:
             "hls-segment-ignore-names": [],
             "hls-segment-key-uri": None,
             "hls-audio-select": [],
+            "dash-manifest-reload-attempts": 3,
             "ffmpeg-ffmpeg": None,
             "ffmpeg-no-validation": False,
             "ffmpeg-verbose": False,
@@ -367,7 +383,7 @@ class Streamlink:
             * - hls-playlist-reload-attempts
               - ``int``
               - ``3``
-              - Number of HLS playlist reload attempts before giving up
+              - Max number of HLS playlist reload attempts before giving up
             * - hls-playlist-reload-time
               - ``str | float``
               - ``"default"``
@@ -395,6 +411,10 @@ class Streamlink:
               - ``[]``
               - Select a specific audio source or sources when multiple audio sources are available,
                 by language code or name, or ``"*"`` (asterisk)
+            * - dash-manifest-reload-attempts
+              - ``int``
+              - ``3``
+              - Max number of DASH manifest reload attempts before giving up
             * - hls-segment-attempts *(deprecated)*
               - ``int``
               - ``3``
@@ -506,7 +526,7 @@ class Streamlink:
             plugincls = self.plugins[plugin]
             return plugincls.get_option(key)
 
-    @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)  # noqa: B019
     def resolve_url(
         self,
         url: str,
@@ -542,6 +562,7 @@ class Streamlink:
                     warnings.warn(
                         f"Resolved plugin {name} with deprecated can_handle_url API",
                         StreamlinkDeprecationWarning,
+                        stacklevel=1,
                     )
                     candidate = name, plugin
                     priority = prio
@@ -609,7 +630,7 @@ class Streamlink:
         """
 
         success = False
-        for loader, name, ispkg in pkgutil.iter_modules([path]):
+        for _loader, name, _ispkg in pkgutil.iter_modules([path]):
             # set the full plugin module name
             # use the "streamlink.plugins." prefix even for sideloaded plugins
             module_name = f"streamlink.plugins.{name}"
