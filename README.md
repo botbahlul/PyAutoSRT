@@ -5,7 +5,7 @@
 https://user-images.githubusercontent.com/88623122/218178963-fb77891c-1845-4514-8806-069dc342dca3.mp4
 
 ### UPDATE NOTES
-SINCE VERSION 0.1.14 I ADDED streamlink MODULE WHICH SUPPORTS urllib3 <=1.x BRANCH ONLY, SO IF YOU HAVE ALREADY INSTALLED urllib3 >= 2.x THIS APP WON'T WORK PROPERLY. IF YOU'RE STILL WANT TO INSTALL THIS APP TRY TO REINSTALL streamlink WITH \"--force-reinstall\" ARGUMENT.
+SINCE VERSION 0.1.14 I ADDED streamlink MODULE WHICH SUPPORTS urllib3 >=1.26.0, <=3.x, BRANCH ONLY, SO IF YOU'RE STILL WANT TO INSTALL THIS APP TRY TO REINSTALL streamlink WITH \"--force-reinstall\" ARGUMENT.
 ```
 pip install streamlink --force-reinstall
 ```
