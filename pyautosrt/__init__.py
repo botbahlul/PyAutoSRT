@@ -395,12 +395,14 @@ def is_same_language(src, dst, error_messages_callback=None):
 
 def check_file_type(file_path, error_messages_callback=None):
     try:
-        ffprobe_cmd = ['ffprobe', '-v', '-1', '-show_format', '-show_streams', '-print_format', 'json', file_path]
+        if "\\" in file_path:
+            file_path = file_path.replace("\\", "/")
+        ffprobe_cmd = ['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-print_format', 'json', file_path]
         output = None
         if sys.platform == "win32":
-            output = subprocess.check_output(ffprobe_cmd, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
         else:
-            output = subprocess.check_output(ffprobe_cmd).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE).decode('utf-8')
         data = json.loads(output)
 
         if 'streams' in data:
@@ -409,6 +411,7 @@ def check_file_type(file_path, error_messages_callback=None):
                     return 'audio'
                 elif 'codec_type' in stream and stream['codec_type'] == 'video':
                     return 'video'
+
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         pass
 
@@ -442,6 +445,7 @@ class Language:
         self.list_codes.append("ca")
         self.list_codes.append("ceb")
         self.list_codes.append("ny")
+        self.list_codes.append("zh")
         self.list_codes.append("zh-CN")
         self.list_codes.append("zh-TW")
         self.list_codes.append("co")
@@ -576,6 +580,7 @@ class Language:
         self.list_names.append("Catalan")
         self.list_names.append("Cebuano")
         self.list_names.append("Chichewa")
+        self.list_names.append("Chinese")
         self.list_names.append("Chinese (Simplified)")
         self.list_names.append("Chinese (Traditional)")
         self.list_names.append("Corsican")
@@ -713,6 +718,7 @@ class Language:
                         'ca': 'Catalan',
                         'ceb': 'Cebuano',
                         'ny': 'Chichewa',
+                        'zh': 'Chinese',
                         'zh-CN': 'Chinese (Simplified)',
                         'zh-TW': 'Chinese (Traditional)',
                         'co': 'Corsican',
@@ -872,6 +878,8 @@ class WavConverter:
 
     def __call__(self, media_filepath):
         temp = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        if "\\" in media_filepath:
+            media_filepath = media_filepath.replace("\\", "/")
         if not os.path.isfile(media_filepath):
             if self.error_messages_callback:
                 self.error_messages_callback("The given file does not exist: {0}".format(media_filepath))
@@ -907,7 +915,8 @@ class WavConverter:
             for progress in ff.run_command_with_progress():
                 percentage = progress
                 if self.progress_callback:
-                    self.progress_callback(media_filepath, percentage)
+                    info = "Converting to a temporary WAV file"
+                    self.progress_callback(info, media_filepath, percentage)
             temp.close()
 
             return temp.name, self.rate
@@ -1023,6 +1032,9 @@ class FLACConverter(object):
 
     def __call__(self, region):
         try:
+            if "\\" in self.wav_filepath:
+                self.wav_filepath = self.wav_filepath.replace("\\", "/")
+
             start, end = region
             start = max(0, start - self.include_before)
             end += self.include_after
@@ -1368,12 +1380,103 @@ class SRTFileReader:
             return
 
 
+class MediaSubtitleRenderer:
+    @staticmethod
+    def which(program):
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+        fpath, _ = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if is_exe(exe_file):
+                    return exe_file
+        return None
+
+    @staticmethod
+    def ffmpeg_check():
+        if WavConverter.which("ffmpeg"):
+            return "ffmpeg"
+        if WavConverter.which("ffmpeg.exe"):
+            return "ffmpeg.exe"
+        return None
+
+    def __init__(self, subtitle_path=None, output_path=None, progress_callback=None, error_messages_callback=None):
+        self.subtitle_path = subtitle_path
+        self.output_path = output_path
+        self.progress_callback = progress_callback
+        self.error_messages_callback = error_messages_callback
+
+    def __call__(self, media_filepath):
+        if "\\" in media_filepath:
+            media_filepath = media_filepath.replace("\\", "/")
+
+        if "\\" in self.subtitle_path:
+            self.subtitle_path = self.subtitle_path.replace("\\", "/")
+
+        if "\\" in self.output_path:
+            self.output_path = self.output_path.replace("\\", "/")
+
+        if not os.path.isfile(media_filepath):
+            if self.error_messages_callback:
+                self.error_messages_callback("The given file does not exist: {0}".format(media_filepath))
+            else:
+                print("The given file does not exist: {0}".format(media_filepath))
+                raise Exception("Invalid file: {0}".format(media_filepath))
+        if not self.ffmpeg_check():
+            if self.error_messages_callback:
+                self.error_messages_callback("ffmpeg: Executable not found on machine.")
+            else:
+                print("ffmpeg: Executable not found on machine.")
+                raise Exception("Dependency not found: ffmpeg")
+
+        try:
+            ffmpeg_command = [
+                                "ffmpeg",
+                                "-y",
+                                "-i", media_filepath,
+                                "-vf", f"subtitles={shlex.quote(self.subtitle_path)}",
+                                self.output_path
+                             ]
+
+            ff = FfmpegProgress(ffmpeg_command)
+            percentage = 0
+            for progress in ff.run_command_with_progress():
+                percentage = progress
+                if self.progress_callback:
+                    info = 'Rendering subtitle file into media file'
+                    self.progress_callback(info, media_filepath, percentage)
+
+            if os.path.isfile(self.output_path):
+                return self.output_path
+            else:
+                return None
+
+        except KeyboardInterrupt:
+            if self.error_messages_callback:
+                self.error_messages_callback("Cancelling all tasks")
+            else:
+                print("Cancelling all tasks")
+            return
+
+        except Exception as e:
+            if self.error_messages_callback:
+                self.error_messages_callback(e)
+            else:
+                print(e)
+            return
+
+
 #=======================================================================================================================================#
 
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
-VERSION = "0.1.19"
+VERSION = "0.1.22"
 
 '''
 from autosrt import Language, WavConverter,  SpeechRegionFinder, FLACConverter, SpeechRecognizer, SentenceTranslator, \
@@ -1713,12 +1816,12 @@ def stop_record_streaming_linux():
         if main_window: main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
 
 
-def show_progress(media_filepath, progress):
+def show_progress(info, media_filepath, progress):
     global main_window, start_time
     base, ext = os.path.splitext(media_filepath)
     file_display_name = os.path.basename(media_filepath).split('/')[-1]
 
-    info = 'Converting to a temporary WAV file'
+    #info = 'Converting to a temporary WAV file'
     total = 100
     percentage = f'{int(progress*100/100)}%'
     if progress > 0:
@@ -1744,7 +1847,7 @@ def show_error_messages(messages):
 
 
 # RUN A THREAD FOR EACH MEDIA FILE IN PARALEL
-def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepaths):
+def transcribe(src, dst, media_filepath, media_type, subtitle_format, event, n_media_filepaths, render):
     global thread_transcribe, thread_transcribe_starter, not_transcribing, pool, main_window, completed_tasks, start_time
 
     if not_transcribing: return
@@ -2093,6 +2196,33 @@ def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepat
             completed_tasks += 1
             main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
 
+            if render:
+                base, ext = os.path.splitext(media_filepath)
+                rendered_media_filepath = "{base}.rendered.{format}".format(base=base, format=ext[1:])
+
+                subtitle_path = None
+                if do_translate:
+                    subtitle_path = translated_subtitle_filepath
+                else:
+                    subtitle_path = subtitle_filepath
+
+                window_key = '-PROGRESS-LOG-'
+                msg = 'Rendering {} subtitles into {} file...\n' .format(file_display_name, media_type)
+                append_flag = True
+                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                try:
+                    subtitle_renderer = MediaSubtitleRenderer(subtitle_path=subtitle_path, output_path=rendered_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                    result = subtitle_renderer(media_filepath)
+                except Exception as e:
+                    not_transcribing = True
+                    main_window.write_event_value("-EXCEPTION-", e)
+                    return
+
+                if not_transcribing: return
+               
+
+
         except Exception as e:
             not_transcribing = True
             main_window.write_event_value("-EXCEPTION-", e)
@@ -2104,19 +2234,23 @@ def transcribe(src, dst, media_filepath, subtitle_format, event, n_media_filepat
             pool[media_filepath] = None
 
 
-def start_transcription(media_filepaths, src, dst, subtitle_format):
+def start_transcription(media_filepaths, src, dst, subtitle_format, render):
     global pool, thread_transcribe, thread_transcribe_starter, completed_tasks, main_window
 
     n_media_filepaths = len(media_filepaths)
     completion_events = {}  # Dictionary to store completion events
     pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in media_filepaths}
+    media_types = {}
 
     # Create completion events for each media file
     for media_filepath in media_filepaths:
         completion_events[media_filepath] = threading.Event()
 
     for file in media_filepaths:
-        thread_transcribe = Thread(target=transcribe, args=(src, dst, file, subtitle_format, completion_events[media_filepath], n_media_filepaths), daemon=True)
+        media_types[file] = check_file_type(file, error_messages_callback=show_error_messages)
+
+    for file in media_filepaths:
+        thread_transcribe = Thread(target=transcribe, args=(src, dst, file, media_types[file], subtitle_format, completion_events[media_filepath], n_media_filepaths, render), daemon=True)
         thread_transcribe.start()
 
     # Wait for all threads to complete
@@ -2170,6 +2304,7 @@ def main():
     thread_transcribe = None
     thread_transcribe_starter = None
     completed_tasks = 0
+    render = False
 
     parser = argparse.ArgumentParser()
     parser.add_argument('source_path', help="Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with a space character e.g. \"file 1.mp4\" \"file 2.mp4\")", nargs='*', default='')
@@ -2187,6 +2322,7 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all supported languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all supported subtitle formats", action='store_true')
+    parser.add_argument('-r', '--render', help="Boolean value (True or False) for render subtitle file into video file", type=bool, default=False)
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
     args = parser.parse_args()
@@ -2274,6 +2410,11 @@ def main():
             sg.Popup(msg, title="Info", line_width=100, any_key_closes=True)
 
 
+    for media_filepath in sg_listbox_values:
+        if ".rendered." in str(media_filepath):
+            sg_listbox_values.remove(media_filepath)
+
+
     if args.src_language:
         if args.src_language not in language.name_of_code.keys():
             msg = "Voice language you typed is not supported\nPlease select one from combobox"
@@ -2309,6 +2450,13 @@ def main():
             subtitle_format = args.format
             sg_combo_subtitle_format_values = subtitle_format
 
+    if str(args.render) == "true":
+        args.render = True
+    if str(args.render) == "false":
+        args.render = False
+
+    if args.render:
+        render=True
 
 #------------------------------------------------------------- MAIN WINDOW -------------------------------------------------------------#
 
@@ -2328,7 +2476,8 @@ def main():
                 ],
                 [
                     sg.Text('Subtitle format', size=(18,1)),
-                    sg.Combo(list(SubtitleFormatter.supported_formats), default_value=sg_combo_subtitle_format_values, enable_events=True, key='-SUBTITLE-FORMAT-')
+                    sg.Combo(list(SubtitleFormatter.supported_formats), default_value=sg_combo_subtitle_format_values, enable_events=True, key='-SUBTITLE-FORMAT-'),
+                    sg.Checkbox("Render subtitles to media file", default=render, key='-RENDER-SUBTITLE-')
                 ],
                 [
                     sg.Text('URL', size=(18,1)),
@@ -2573,7 +2722,14 @@ def main():
                         if "\\" in filepaths[i]:
                             filepaths[i] = filepaths[i].replace("\\", "/")
 
+
                 if filepaths:
+                    for file in filepaths:
+                        if ".rendered." in str(file):
+                            filepaths.remove(file)
+                            msg = "{} is already a subtitles rendered media file".format(file)
+                            sg.Popup(msg, title="Info", line_width=100, any_key_closes=False)
+
                     for file in filepaths:
                         file = file.replace("\\", "/")
                         if file not in sg_listbox_values:
@@ -2655,7 +2811,7 @@ def main():
                     completed_tasks = 0
                     pool = None
                     main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-                    thread_transcribe_starter = Thread(target=start_transcription, args=(sg_listbox_values, src, dst, subtitle_format), daemon=True)
+                    thread_transcribe_starter = Thread(target=start_transcription, args=(sg_listbox_values, src, dst, subtitle_format, render), daemon=True)
                     thread_transcribe_starter.start()
 
                 else:
