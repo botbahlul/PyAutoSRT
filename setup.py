@@ -2,6 +2,11 @@
 from __future__ import unicode_literals
 import platform
 from pyautosrt import VERSION
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module='setuptools')
+warnings.filterwarnings("ignore", category=UserWarning, module='setuptools')
+warnings.filterwarnings("ignore", message=".*is deprecated*")
+
 try:
     from setuptools import setup, find_packages
 except ImportError:
