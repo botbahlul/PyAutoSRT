@@ -41,7 +41,7 @@ import shlex
 #warnings.filterwarnings("ignore", category=RuntimeWarning)
 #sys.tracebacklimit = 0
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 #======================================================== ffmpeg_progress_yield ========================================================#
@@ -1188,8 +1188,8 @@ class WavConverter:
             #use_shell = True if os.name == "nt" else False
             #subprocess.check_output(command, stdin=open(os.devnull), shell=use_shell)
 
-            file_display_name = os.path.basename(media_filepath).split('/')[-1]
-            info = f"Converting '{file_display_name}' to a temporary WAV file"
+            media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+            info = f"Converting '{media_file_display_name}' to a temporary WAV file"
             start_time = time.time()
 
             # RUNNING ffmpeg WITH PROGRESSS
@@ -1198,7 +1198,7 @@ class WavConverter:
             for progress in ff.run_command_with_progress():
                 percentage = progress
                 if self.progress_callback:
-                    self.progress_callback(info, media_filepath, percentage, start_time)
+                    self.progress_callback(info, media_file_display_name, percentage, start_time)
             temp.close()
 
             return temp.name, self.rate
@@ -1610,12 +1610,12 @@ class SRTFileReader:
     def __call__(srt_file_path):
         try:
             """
-            Read SRT formatted subtitle file and return subtitles as list of tuples
+            Read SRT formatted subtitles file and return subtitles as list of tuples
             """
             timed_subtitles = []
             with open(srt_file_path, 'r') as srt_file:
                 lines = srt_file.readlines()
-                # Split the subtitle file into subtitle blocks
+                # Split the subtitles file into subtitle blocks
                 subtitle_blocks = []
                 block = []
                 for line in lines:
@@ -1907,8 +1907,8 @@ class MediaSubtitleRenderer:
                                 self.output_path
                              ]
 
-            file_display_name = os.path.basename(media_filepath).split('/')[-1]
-            info = f"Rendering subtitle file into {media_filepath}"
+            media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+            info = f"Rendering subtitles file into {media_file_display_name}"
             start_time = time.time()
 
             # RUNNING ffmpeg WITH PROGRESSS
@@ -1917,7 +1917,7 @@ class MediaSubtitleRenderer:
             for progress in ff.run_command_with_progress():
                 percentage = progress
                 if self.progress_callback:
-                    self.progress_callback(info, media_filepath, percentage, start_time)
+                    self.progress_callback(info, media_file_display_name, percentage, start_time)
 
             if os.path.isfile(self.output_path):
                 return self.output_path
@@ -2055,8 +2055,8 @@ class MediaSubtitleEmbedder:
                                     self.output_path
                                  ]
 
-                file_display_name = os.path.basename(media_filepath).split('/')[-1]
-                info = f"Embedding subtitle file into {media_filepath}"
+                media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+                info = f"Embedding subtitles file into {media_file_display_name}"
                 start_time = time.time()
 
                 # USING ffmpeg_progress_yield MODULE
@@ -2065,7 +2065,7 @@ class MediaSubtitleEmbedder:
                 for progress in ff.run_command_with_progress():
                     percentage = progress
                     if self.progress_callback:
-                        self.progress_callback(info, media_filepath, percentage, start_time)
+                        self.progress_callback(info, media_file_display_name, percentage, start_time)
 
                 if os.path.isfile(self.output_path):
                     return self.output_path
@@ -2152,7 +2152,8 @@ class MediaSubtitleRemover:
                                 self.output_path
                              ]
 
-            info = "Removing subtitle streams from file"
+            media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+            info = f"Removing subtitle streams from {media_file_display_name}"
             start_time = time.time()
 
             # USING ffmpeg_progress_yield MODULE
@@ -2161,7 +2162,7 @@ class MediaSubtitleRemover:
             for progress in ff.run_command_with_progress():
                 percentage = progress
                 if self.progress_callback:
-                    self.progress_callback(info, media_filepath, percentage, start_time)
+                    self.progress_callback(info, media_file_display_name, percentage, start_time)
 
             '''
             # WITHOUT USING ffmpeg_progress_yield MODULE
@@ -2189,7 +2190,7 @@ class MediaSubtitleRemover:
                     if current_duration>0:
                         percentage = int(current_duration*100/total_duration)
                         if self.progress_callback:
-                            self.progress_callback(info, media_filepath, percentage)
+                            self.progress_callback(info, media_file_display_name, percentage, start_time)
             '''
 
             if os.path.isfile(self.output_path):
@@ -2602,11 +2603,8 @@ def stop_record_streaming_linux():
         if main_window: main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
 
 
-def show_progress(info, media_filepath, progress, start_time):
+def show_progress(info, media_file_display_name, progress, start_time):
     global main_window
-    base, ext = os.path.splitext(media_filepath)
-    file_display_name = os.path.basename(media_filepath).split('/')[-1]
-
     total = 100
     percentage = f'{progress}%'
     if progress > 0:
@@ -2617,12 +2615,12 @@ def show_progress(info, media_filepath, progress, start_time):
     eta_time = timedelta(seconds=int(eta_seconds))
     eta_str = str(eta_time)
     hour, minute, second = eta_str.split(":")
-    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
     if progress == total:
         elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
         elapsed_time_str = str(elapsed_time_seconds)
         hour, minute, second = elapsed_time_str.split(":")
-        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
 
 def show_error_messages(messages):
@@ -2632,21 +2630,25 @@ def show_error_messages(messages):
 
 
 def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src, embed_dst, force_recognize):
-    global main_window, language, thread_transcribe, thread_transcribe_starter, not_transcribing, pool, \
-            removed_media_filepaths, completed_tasks, start_time  #, transcribe_completion_events
+    global main_window, language, thread_remove_subtitles, thread_transcribe, thread_transcribe_starter, not_transcribing, pool, \
+            removed_media_filepaths, completed_tasks, start_time
+
+    media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+
+    results = []
 
     # CHECKING SUBTITLE STREAMS
     if force_recognize == False:
 
-        file_display_name = os.path.basename(media_filepath).split('/')[-1]
+        #media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
         src_subtitle_filepath = None
         dst_subtitle_filepath = None
         src_embedded_media_filepath = None
         dst_embedded_media_filepath = None
         ffmpeg_src_language_code = None
         ffmpeg_dst_language_code = None
-        results = []
 
+        # NO TRANSLATE (src == dst)
         # CHECKING ffmpeg_src_language_code SUBTITLE STREAM ONLY, IF EXISTS WE PRINT IT AND EXTRACT IT
         if is_same_language(src, dst, error_messages_callback=show_error_messages):
 
@@ -2654,13 +2656,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
             ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
 
-            window_key = '-PROGRESS-LOG-'
-            msg = f"Checking {file_display_name}\n"
-            append_flag = True
-            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
             subtitle_stream_parser = SubtitleStreamParser(error_messages_callback=show_error_messages)
             subtitle_streams_data = subtitle_stream_parser(media_filepath)
+
+            window_key = '-PROGRESS-LOG-'
+            msg = f"Checking {media_file_display_name}\n"
+            append_flag = True
+            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
             if not_transcribing: return
 
@@ -2673,7 +2675,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     if not_transcribing: return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(file_display_name, ffmpeg_src_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(media_file_display_name, ffmpeg_src_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2682,64 +2684,71 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     for entry in src_subtitle_stream_timed_subtitles:
                         subtitle_stream_regions.append(entry[0])
                         subtitle_stream_transcripts.append(entry[1])
+
                     base, ext = os.path.splitext(media_filepath)
                     src_subtitle_filepath = "{base}.{src}.{format}".format(base=base, src=src, format=subtitle_format)
+
                     writer = SubtitleWriter(subtitle_stream_regions, subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
+                    writer.write(src_subtitle_filepath)
+
+                    if os.path.isfile(src_subtitle_filepath) and src_subtitle_filepath not in results:
+                        results.append(src_subtitle_filepath)
 
                     if not_transcribing: return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = f"Extracting {file_display_name} '{ffmpeg_src_language_code}' subtitle stream as :\n  {src_subtitle_filepath}\n"
+                    msg = f"Extracting {media_file_display_name} '{ffmpeg_src_language_code}' subtitle stream as :\n  {src_subtitle_filepath}\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                    writer.write(src_subtitle_filepath)
-                    if force_recognize == False:
-                        if media_filepath not in removed_media_filepaths:
-                            removed_media_filepaths.append(media_filepath)
-
                     if not_transcribing: return
 
-                    if src_subtitle_filepath and os.path.isfile(src_subtitle_filepath):
+                    # no translate process
+
+                    # print overall results
+                    if os.path.isfile(src_subtitle_filepath):
+
                         window_key = '-RESULTS-'
-                        msg = f"Results for {file_display_name} :\n"
+                        msg = f"Results for {media_file_display_name} :\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                        window_key = '-RESULTS-'
-                        msg = "{}\n".format(src_subtitle_filepath)
-                        append_flag = True
-                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+                        for result in results:
+                            window_key = '-RESULTS-'
+                            msg = f"{result}\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                         window_key = '-RESULTS-'
                         msg = "\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                        completed_tasks += 1
-                        main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+                        # remove media_filepath from transcribe proceed_list
                         if force_recognize == False:
                             if media_filepath not in removed_media_filepaths:
                                 removed_media_filepaths.append(media_filepath)
 
+                        completed_tasks += 1
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
                     if embed_src == True:
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
+                        msg = f"No need to embed '{ffmpeg_src_language_code}' subtitle into {media_file_display_name} because it's already existed\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-
                 else:
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : No\n" %(file_display_name, ffmpeg_src_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : No\n" %(media_file_display_name, ffmpeg_src_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                     if not_transcribing: return
 
-                
             if not_transcribing: return
 
+        # DO TRANSLATE (src != dst)
         # CHECKING ffmpeg_src_language_code AND ffmpeg_dst_language_code SUBTITLE STREAMS, IF EXISTS WE PRINT IT AND EXTRACT IT
         # IF ONE OF THEM (ffmpeg_src_language_code OR ffmpeg_dst_language_code) NOT EXIST, WE TRANSLATE IT,
         # AND IF BOOLEAN VALUE FOR EMBED (FOR SRC OR DST LANGUAGE) IS TRUE THEN WE EMBED IT
@@ -2756,7 +2765,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
             if not_transcribing: return
 
             window_key = '-PROGRESS-LOG-'
-            msg = f"Checking {file_display_name}\n"
+            msg = f"Checking {media_file_display_name}\n"
             append_flag = True
             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2773,7 +2782,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     if not_transcribing: return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(file_display_name, ffmpeg_src_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(media_file_display_name, ffmpeg_src_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2783,34 +2792,33 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         subtitle_stream_regions.append(entry[0])
                         subtitle_stream_transcripts.append(entry[1])
                         if not_transcribing: return
+
                     base, ext = os.path.splitext(media_filepath)
                     src_subtitle_filepath = "{base}.{src}.{format}".format(base=base, src=src, format=subtitle_format)
+
                     writer = SubtitleWriter(subtitle_stream_regions, subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
-
-                    if not_transcribing: return
-
-                    window_key = '-PROGRESS-LOG-'
-                    msg = f"Extracting {file_display_name} '{ffmpeg_src_language_code}' subtitle stream as :\n  {src_subtitle_filepath}\n"
-                    append_flag = True
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
                     writer.write(src_subtitle_filepath)
 
-                    results.append(src_subtitle_filepath)
+                    if os.path.isfile(src_subtitle_filepath) and src_subtitle_filepath not in results:
+                        results.append(src_subtitle_filepath)
+
+                    window_key = '-PROGRESS-LOG-'
+                    msg = f"Extracting {media_file_display_name} '{ffmpeg_src_language_code}' subtitle stream as :\n  {src_subtitle_filepath}\n"
+                    append_flag = True
+                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                     if not_transcribing: return
 
                     if embed_src == True:
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
+                        msg = f"No need to embed '{ffmpeg_src_language_code}' subtitle into {media_file_display_name} because it's already existed\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
 
                 # ffmpeg_src_language_code subtitle stream not exist, just print it
                 else:
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : No\n" %(file_display_name, ffmpeg_src_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : No\n" %(media_file_display_name, ffmpeg_src_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2822,11 +2830,9 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     if not_transcribing: return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(file_display_name, ffmpeg_dst_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : Yes\n" %(media_file_display_name, ffmpeg_dst_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                    if not_transcribing: return
 
                     subtitle_stream_regions = []
                     subtitle_stream_transcripts = []
@@ -2834,33 +2840,35 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         subtitle_stream_regions.append(entry[0])
                         subtitle_stream_transcripts.append(entry[1])
                         if not_transcribing: return
+
                     base, ext = os.path.splitext(media_filepath)
                     dst_subtitle_filepath = "{base}.{dst}.{format}".format(base=base, dst=dst, format=subtitle_format)
+
                     writer = SubtitleWriter(subtitle_stream_regions, subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
+                    writer.write(dst_subtitle_filepath)
+
+                    if os.path.isfile(dst_subtitle_filepath) and dst_subtitle_filepath not in results:
+                        results.append(dst_subtitle_filepath)
 
                     if not_transcribing: return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = f"Extracting {file_display_name} '{ffmpeg_dst_language_code}' subtitle stream as :\n  {dst_subtitle_filepath}\n"
+                    msg = f"Extracting {media_file_display_name} '{ffmpeg_dst_language_code}' subtitle stream as :\n  {dst_subtitle_filepath}\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                    writer.write(dst_subtitle_filepath)
-
-                    results.append(dst_subtitle_filepath)
-
-                    if not_transcribing: return
-
                     if embed_dst == True:
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"Cannot embed '{dst_subtitle_filepath}' into {file_display_name} because '{ffmpeg_dst_language_code}' subtitle stream already existed\n"
+                        msg = f"No need to embed '{ffmpeg_dst_language_code}' subtitle into {media_file_display_name} because it's already existed\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                    if not_transcribing: return
 
                 # ffmpeg_dst_language_code subtitle stream not exist, just print it
                 else:
                     window_key = '-PROGRESS-LOG-'
-                    msg = "Is %s has '%s' subtitle stream : No\n" %(file_display_name, ffmpeg_dst_language_code.center(3))
+                    msg = "Is %s has '%s' subtitle stream : No\n" %(media_file_display_name, ffmpeg_dst_language_code.center(3))
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2876,7 +2884,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         if not_transcribing: return
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f'Translating {file_display_name} subtitles from {language.name_of_code[dst]} ({dst}) to {language.name_of_code[src]} ({src})...\n'
+                        msg = f'Translating {media_file_display_name} subtitles from {language.name_of_code[dst]} ({dst}) to {language.name_of_code[src]} ({src})...\n'
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -2902,8 +2910,6 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             translated_subtitle_stream_transcripts.append(translated_subtitle_stream_transcript)
 
-                            if not_transcribing: return
-
                             progress = int(i*100/len(dst_subtitle_stream_timed_subtitles))
                             percentage = f'{progress}%'
 
@@ -2915,13 +2921,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             eta_time = timedelta(seconds=int(eta_seconds))
                             eta_str = str(eta_time)
                             hour, minute, second = eta_str.split(":")
-                            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+                            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
 
                         elapsed_time = time.time() - start_time
                         elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
                         elapsed_time_str = str(elapsed_time_seconds)
                         hour, minute, second = elapsed_time_str.split(":")
-                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
                         if not_transcribing:
                             if pool[media_filepath]:
@@ -2932,16 +2938,18 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             return
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"Writing {file_display_name} translated subtitle file...\n"
+                        msg = f"Writing {media_file_display_name} translated subtitles file...\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                         base, ext = os.path.splitext(media_filepath)
                         src_subtitle_filepath = "{base}.{src}.{format}".format(base=base, src=src, format=subtitle_format)
+
                         translation_writer = SubtitleWriter(subtitle_stream_regions, translated_subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                         translation_writer.write(src_subtitle_filepath)
 
-                        results.append(src_subtitle_filepath)
+                        if os.path.isfile(src_subtitle_filepath) and src_subtitle_filepath not in results:
+                            results.append(src_subtitle_filepath)
 
                         if not_transcribing:
                             if pool[media_filepath]:
@@ -2952,55 +2960,89 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             return
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"{file_display_name} translated subtitles file saved as :\n  {src_subtitle_filepath}\n"
+                        msg = f"{media_file_display_name} translated subtitles file saved as :\n  {src_subtitle_filepath}\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                         # if embed_src is True then we embed that translated srt (from dst to src) above into media_filepath
-                        if embed_src == True and dst_subtitle_stream_timed_subtitles and dst_subtitle_stream_timed_subtitles != []:
+                        if embed_src == True:
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
+
+                            ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
 
                             base, ext = os.path.splitext(media_filepath)
-                            tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
-                            ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
+                            src_tmp_embedded_media_filepath = "{base}.src.tmp.embedded.{format}".format(base=base, format=ext[1:])
                             src_embedded_media_filepath = "{base}.{src}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, format=ext[1:])
 
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {file_display_name}"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {media_file_display_name}"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
 
                             try:
-                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                                result = subtitle_embedder(media_filepath)
+                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                                src_tmp_output = subtitle_embedder(media_filepath)
                             except Exception as e:
                                 not_transcribing = True
                                 main_window.write_event_value("-EXCEPTION-", e)
                                 return
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1):
-                                shutil.copy(tmp_embedded_media_filepath_1, src_embedded_media_filepath)
-                                os.remove(tmp_embedded_media_filepath_1)
+                            if os.path.isfile(src_tmp_output):
+                                shutil.copy(src_tmp_output, src_embedded_media_filepath)
+                                os.remove(src_tmp_output)
 
-                                results.append(src_embedded_media_filepath)
+                                if src_embedded_media_filepath not in results:
+                                    results.append(src_embedded_media_filepath)
 
                             if os.path.isfile(src_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"{file_display_name} subtitle embedded {media_type} file saved as :\n  {src_embedded_media_filepath}\n"
-                                append_flag = True
-                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-                            else:
-                                window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {src_embedded_media_filepath}\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            if not_transcribing: return
+                            else:
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Unknown error\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        # if args.embed_dst is True we can't embed it because dst subtitle stream already exist
+                        if embed_dst == True:
+                            window_key = '-PROGRESS-LOG-'
+                            msg = f"No need to embed '{ffmpeg_dst_language_code}' subtitle into {media_file_display_name} because it's already existed\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        if not_transcribing:
+                            if pool[media_filepath]:
+                                pool[media_filepath].terminate()
+                                pool[media_filepath].close()
+                                pool[media_filepath].join()
+                                pool[media_filepath] = None
+                            return
 
                         if force_recognize == False:
                             if media_filepath not in removed_media_filepaths:
@@ -3017,7 +3059,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         if not_transcribing: return
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f'Translating {file_display_name} subtitles from {language.name_of_code[src]} ({src}) to {language.name_of_code[dst]} ({dst})...\n'
+                        msg = f'Translating {media_file_display_name} subtitles from {language.name_of_code[src]} ({src}) to {language.name_of_code[dst]} ({dst})...\n'
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3043,7 +3085,6 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             translated_subtitle_stream_transcripts.append(translated_subtitle_stream_transcript)
 
                             progress = int(i*100/len(src_subtitle_stream_timed_subtitles))
-                        
                             percentage = f'{progress}%'
 
                             if progress > 0:
@@ -3054,13 +3095,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             eta_time = timedelta(seconds=int(eta_seconds))
                             eta_str = str(eta_time)
                             hour, minute, second = eta_str.split(":")
-                            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+                            main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
 
                         elapsed_time = time.time() - start_time
                         elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
                         elapsed_time_str = str(elapsed_time_seconds)
                         hour, minute, second = elapsed_time_str.split(":")
-                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
                         if not_transcribing:
                             if pool[media_filepath]:
@@ -3071,19 +3112,21 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             return
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"Writing {file_display_name} translated subtitle file...\n"
+                        msg = f"Writing {media_file_display_name} translated subtitles file...\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                         base, ext = os.path.splitext(media_filepath)
                         dst_subtitle_filepath = "{base}.{dst}.{format}".format(base=base, dst=dst, format=subtitle_format)
+
                         translation_writer = SubtitleWriter(subtitle_stream_regions, translated_subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                         translation_writer.write(dst_subtitle_filepath)
 
-                        results.append(dst_subtitle_filepath)
+                        if os.path.isfile(dst_subtitle_filepath) and dst_subtitle_filepath not in results:
+                            results.append(dst_subtitle_filepath)
 
                         window_key = '-PROGRESS-LOG-'
-                        msg = f"{file_display_name} translated subtitles file saved as :\n  {dst_subtitle_filepath}\n"
+                        msg = f"{media_file_display_name} translated subtitles file saved as :\n  {dst_subtitle_filepath}\n"
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3091,72 +3134,90 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             if media_filepath not in removed_media_filepaths:
                                 removed_media_filepaths.append(media_filepath)
 
-                        # if embed_src is True we embed_src that translated srt into media_filepath
+                        # if args.embed_src is True we can't embed it because src subtitle stream already exist
+                        if embed_src == True:
+                            window_key = '-PROGRESS-LOG-'
+                            msg = f"No need to embed '{ffmpeg_src_language_code}' subtitle into {media_file_display_name} because it's already existed\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+
+                        # if embed_dst is True we embed the translated srt (from src to dst) above into media_filepath
                         if embed_dst == True and src_subtitle_stream_timed_subtitles and src_subtitle_stream_timed_subtitles != []:
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
 
                             base, ext = os.path.splitext(media_filepath)
-                            tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
+                            src_tmp_embedded_media_filepath = "{base}.src.tmp.embedded.{format}".format(base=base, format=ext[1:])
                             ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
                             dst_embedded_media_filepath = "{base}.{dst}.embedded.{format}".format(base=base, dst=ffmpeg_dst_language_code, format=ext[1:])
 
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file into {file_display_name}"
+                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file into {media_file_display_name}"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
 
                             try:
-                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                                result = subtitle_embedder(media_filepath)
+                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                                dst_tmp_output = subtitle_embedder(media_filepath)
                             except Exception as e:
                                 not_transcribing = True
                                 main_window.write_event_value("-EXCEPTION-", e)
                                 return
 
-                            if not_transcribing: return
+                            if not_transcribing:
+                                if pool[media_filepath]:
+                                    pool[media_filepath].terminate()
+                                    pool[media_filepath].close()
+                                    pool[media_filepath].join()
+                                    pool[media_filepath] = None
+                                return
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1):
-                                shutil.copy(tmp_embedded_media_filepath_1, dst_embedded_media_filepath)
-                                os.remove(tmp_embedded_media_filepath_1)
-
-                                results.append(dst_embedded_media_filepath)
+                            if os.path.isfile(dst_tmp_output):
+                                shutil.copy(dst_tmp_output, dst_embedded_media_filepath)
+                                os.remove(dst_tmp_output)
 
                             if os.path.isfile(dst_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"{file_display_name} subtitle embedded {media_type} file saved as :\n  {dst_embedded_media_filepath}\n"
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {dst_embedded_media_filepath}\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                if dst_embedded_media_filepath not in results:
+                                    results.append(dst_embedded_media_filepath)
+
                             else:
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{dst_subtitle_filepath}' into {file_display_name} file because '{ffmpeg_dst_language_code}' subtitle stream already existed\n"
+                                msg = f"Unknown error\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                # ffmpeg_dst_language_code subtitle stream = exist
-                # ffmpeg_src_language_code subtitle stream = exist
-                # remove media_filepath from proceed list
-                elif ffmpeg_dst_language_code in subtitle_stream_parser.languages() and ffmpeg_src_language_code in subtitle_stream_parser.languages():
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
 
-                    if embed_src == True:
-                        window_key = '-PROGRESS-LOG-'
-                        msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} file because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
-                        append_flag = True
-                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                    if embed_dst == True:
-                        window_key = '-PROGRESS-LOG-'
-                        msg = f"Cannot embed '{dst_subtitle_filepath}' into {file_display_name} file because '{ffmpeg_dst_language_code}' subtitle stream already existed\n"
-                        append_flag = True
-                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                if not_transcribing: return
-
+                # print overall results
                 if (src_subtitle_filepath and os.path.isfile(src_subtitle_filepath)) or (dst_subtitle_filepath and os.path.isfile(dst_subtitle_filepath)):
                     window_key = '-RESULTS-'
-                    msg = f"Results for {file_display_name} :\n"
+                    msg = f"Results for {media_file_display_name} :\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3174,18 +3235,18 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     if force_recognize == False:
                         if media_filepath not in removed_media_filepaths:
                             removed_media_filepaths.append(media_filepath)
+
                         completed_tasks += 1
                         main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
 
             if not_transcribing: return
-
-            window_key = '-PROGRESS-LOG-'
-            msg = "\n"
-            append_flag = True
-            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-            #completed_tasks += 1
-            #main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+            if not_transcribing:
+                if pool[media_filepath]:
+                    pool[media_filepath].terminate()
+                    pool[media_filepath].close()
+                    pool[media_filepath].join()
+                    pool[media_filepath] = None
+                return
 
 
     # TRANSCRIBE PART
@@ -3211,24 +3272,14 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
             if os.path.isfile(dst_subtitle_filepath): os.remove(dst_subtitle_filepath)
 
         regions = None
-        file_display_name = os.path.basename(media_filepath).split('/')[-1]
-        short_file_display_name = None
-        w = 0
-        file_display_name_width = len(file_display_name)
-        if file_display_name_width >= 64:
-            w = 64
-            short_file_display_name = file_display_name[0:w] + ".." + ext
-        else:
-            w = file_display_name_width
-            short_file_display_name = file_display_name
 
         window_key = '-PROGRESS-LOG-'
-        msg = f"Processing {file_display_name} :\n"
+        msg = f"Processing {media_file_display_name} :\n"
         append_flag = True
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
         window_key = '-PROGRESS-LOG-'
-        msg = f"Converting {file_display_name} to a temporary WAV file...\n"
+        msg = f"Converting {media_file_display_name} to a temporary WAV file...\n"
         append_flag = True
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3245,12 +3296,12 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
         if not_transcribing: return
 
         window_key = '-PROGRESS-LOG-'
-        msg = f"{file_display_name} converted WAV file is :\n  {wav_filepath}\n"
+        msg = f"{media_file_display_name} converted WAV file is :\n  {wav_filepath}\n"
         append_flag = True
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
         window_key = '-PROGRESS-LOG-'
-        msg = f"Finding speech regions of {file_display_name} WAV file...\n"
+        msg = f"Finding speech regions of {media_file_display_name} WAV file...\n"
         append_flag = True
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3264,7 +3315,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
             return
 
         window_key = '-PROGRESS-LOG-'
-        msg = f"{file_display_name} speech regions found = {len(regions)}\n"
+        msg = f"{media_file_display_name} speech regions found = {len(regions)}\n"
         append_flag = True
 
         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
@@ -3285,13 +3336,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
         if regions:
             try:
                 window_key = '-PROGRESS-LOG-'
-                msg = f'Converting {file_display_name} speech regions to FLAC files...\n'
+                msg = f"Converting {media_file_display_name} speech regions to FLAC files...\n"
                 append_flag = True
                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                file_display_name = os.path.basename(media_filepath).split('/')[-1]
+                media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
 
-                info = 'Converting speech regions to FLAC files'
+                info = f"Converting {media_file_display_name} speech regions to FLAC files"
                 total = 100
 
                 start_time = time.time()
@@ -3321,13 +3372,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     eta_time = timedelta(seconds=int(eta_seconds))
                     eta_str = str(eta_time)
                     hour, minute, second = eta_str.split(":")
-                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
 
                 elapsed_time = time.time() - start_time
                 elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
                 elapsed_time_str = str(elapsed_time_seconds)
                 hour, minute, second = elapsed_time_str.split(":")
-                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
                 if not_transcribing:
                     if pool[media_filepath]:
@@ -3338,13 +3389,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     return
 
                 window_key = '-PROGRESS-LOG-'
-                msg = f"Creating {file_display_name} transcriptions...\n"
+                msg = f"Creating {media_file_display_name} transcriptions...\n"
                 append_flag = True
                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                file_display_name = os.path.basename(media_filepath).split('/')[-1]
+                media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
 
-                info = 'Creating transcriptions'
+                info = f"Creating {media_file_display_name} transcriptions"
                 total = 100
 
                 start_time = time.time()
@@ -3372,13 +3423,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     eta_time = timedelta(seconds=int(eta_seconds))
                     eta_str = str(eta_time)
                     hour, minute, second = eta_str.split(":")
-                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
 
                 elapsed_time = time.time() - start_time
                 elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
                 elapsed_time_str = str(elapsed_time_seconds)
                 hour, minute, second = elapsed_time_str.split(":")
-                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+                main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
                 if not_transcribing:
                     if pool[media_filepath]:
@@ -3389,12 +3440,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     return
 
                 window_key = '-PROGRESS-LOG-'
-                msg = f"Writing {file_display_name} subtitle file...\n"
+                msg = f"Writing {media_file_display_name} subtitles file...\n"
                 append_flag = True
                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                 writer = SubtitleWriter(regions, transcriptions, subtitle_format, error_messages_callback=show_error_messages)
                 writer.write(src_subtitle_filepath)
+
+                if os.path.isfile(src_subtitle_filepath) and src_subtitle_filepath not in results:
+                    results.append(src_subtitle_filepath)
 
                 if not_transcribing:
                     if pool[media_filepath]:
@@ -3433,13 +3487,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = f'Translating {file_display_name} subtitles from {language.name_of_code[src]} ({src}) to {language.name_of_code[dst]} ({dst})...\n'
+                    msg = f"Translating {media_file_display_name} subtitles from {language.name_of_code[src]} ({src}) to {language.name_of_code[dst]} ({dst})...\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                    file_display_name = os.path.basename(media_filepath).split('/')[-1]
+                    media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
 
-                    info = 'Translating subtitles from %s (%s) to %s (%s)' %(language.name_of_code[src], src, language.name_of_code[dst], dst)
+                    info = "Translating %s subtitles from %s (%s) to %s (%s)" %(media_file_display_name, language.name_of_code[src], src, language.name_of_code[dst], dst)
                     total = 100
 
                     start_time = time.time()
@@ -3470,13 +3524,13 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         eta_time = timedelta(seconds=int(eta_seconds))
                         eta_str = str(eta_time)
                         hour, minute, second = eta_str.split(":")
-                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
+                        main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, percentage, progress, hour.zfill(2), minute, second))
 
                     elapsed_time = time.time() - start_time
                     elapsed_time_seconds = timedelta(seconds=int(elapsed_time))
                     elapsed_time_str = str(elapsed_time_seconds)
                     hour, minute, second = elapsed_time_str.split(":")
-                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
+                    main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', (media_file_display_name, info, total, "100%", total, hour.zfill(2), minute, second))
 
                     if not_transcribing:
                         if pool[media_filepath]:
@@ -3487,12 +3541,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         return
 
                     window_key = '-PROGRESS-LOG-'
-                    msg = f"Writing {file_display_name} translated subtitle file...\n"
+                    msg = f"Writing {media_file_display_name} translated subtitles file...\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                     translation_writer = SubtitleWriter(created_regions, translated_transcriptions, subtitle_format, error_messages_callback=show_error_messages)
                     translation_writer.write(dst_subtitle_filepath)
+
+                    if os.path.isfile(dst_subtitle_filepath) and dst_subtitle_filepath not in results:
+                        results.append(dst_subtitle_filepath)
 
                     if not_transcribing:
                         if pool[media_filepath]:
@@ -3503,68 +3560,128 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         return
 
                 window_key = '-PROGRESS-LOG-'
-                msg = f"{file_display_name} subtitles file saved as :\n  {src_subtitle_filepath}\n"
-                append_flag = True
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                window_key = '-RESULTS-'
-                msg = f"Results for {file_display_name} :\n"
-                append_flag = True
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                window_key = '-RESULTS-'
-                msg = "{}\n".format(src_subtitle_filepath)
+                msg = f"{media_file_display_name} subtitles file saved as :\n  {src_subtitle_filepath}\n"
                 append_flag = True
                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
                 if is_same_language(src, dst, error_messages_callback=show_error_messages) and embed_src == False:
+
+                    window_key = '-RESULTS-'
+                    msg = f"Results for {media_file_display_name} :\n"
+                    append_flag = True
+                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                    for result in results:
+                        window_key = '-RESULTS-'
+                        msg = f"{result}\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                    window_key = '-RESULTS-'
+                    msg = "\n"
+                    append_flag = True
+                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                     completed_tasks += 1
                     main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
 
                 if not is_same_language(src, dst, error_messages_callback=show_error_messages):
                     window_key = '-PROGRESS-LOG-'
-                    msg = f"{file_display_name} translated subtitles file saved as :\n  {dst_subtitle_filepath}\n"
+                    msg = f"{media_file_display_name} translated subtitles file saved as :\n  {dst_subtitle_filepath}\n"
                     append_flag = True
                     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                    window_key = '-RESULTS-'
-                    msg = "{}\n" .format(dst_subtitle_filepath)
-                    append_flag = True
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+                    if embed_src == False and embed_dst == False:
 
-                if not is_same_language(src, dst, error_messages_callback=show_error_messages) and embed_src == False and embed_dst == False:
-                    completed_tasks += 1
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+                        window_key = '-RESULTS-'
+                        msg = f"Results for {media_file_display_name} :\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                # EMBEDDING SUBTITLE FILE
-                embedded_media_filepath = None
+                        for result in results:
+                            window_key = '-RESULTS-'
+                            msg = f"{result}\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        window_key = '-RESULTS-'
+                        msg = "\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        completed_tasks += 1
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
+                if not_transcribing:
+                    if pool[media_filepath]:
+                        pool[media_filepath].terminate()
+                        pool[media_filepath].close()
+                        pool[media_filepath].join()
+                        pool[media_filepath] = None
+                    return
+
+                # EMBEDDING subtitles file
+                ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
+                ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
+
+                base, ext = os.path.splitext(media_filepath)
+                src_tmp_embedded_media_filepath = "{base}.{src}.tmp.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, format=ext[1:])
+                dst_tmp_embedded_media_filepath = "{base}.{dst}.tmp.embedded.{format}".format(base=base, dst=ffmpeg_dst_language_code, format=ext[1:])
+                src_dst_tmp_embedded_media_filepath = "{base}.{src}.{dst}.tmp.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, dst=ffmpeg_dst_language_code, format=ext[1:])
+                src_embedded_media_filepath = "{base}.{src}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, format=ext[1:])
+                dst_embedded_media_filepath = "{base}.{dst}.embedded.{format}".format(base=base, dst=ffmpeg_dst_language_code, format=ext[1:])
+                src_dst_embedded_media_filepath = "{base}.{src}.{dst}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, dst=ffmpeg_dst_language_code, format=ext[1:])
+
                 if is_same_language(src, dst, error_messages_callback=show_error_messages):
 
                     if embed_src == True:
-
-                        base, ext = os.path.splitext(media_filepath)
-                        tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
-                        ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
-
-                        embedded_media_filepath = "{base}.{src}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, format=ext[1:])
-
                         try:
                             window_key = '-PROGRESS-LOG-'
                             msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {media_type}...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                            result = subtitle_embedder(media_filepath)
+                            subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                            src_tmp_output = subtitle_embedder(media_filepath)
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1):
-                                shutil.copy(tmp_embedded_media_filepath_1, embedded_media_filepath)
-                                os.remove(tmp_embedded_media_filepath_1)
-                            else:
+                            if os.path.isfile(src_tmp_output):
+                                shutil.copy(src_tmp_output, src_embedded_media_filepath)
+                                os.remove(src_tmp_output)
+
+                                if src_embedded_media_filepath not in results:
+                                    results.append(src_embedded_media_filepath)
+
+                            if os.path.isfile(src_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {src_embedded_media_filepath}\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = f"Results for {media_file_display_name} :\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                for result in results:
+                                    window_key = '-RESULTS-'
+                                    msg = f"{result}\n"
+                                    append_flag = True
+                                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = "\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                completed_tasks += 1
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
+                            else:
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Unknown error\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
 
                         except Exception as e:
                             not_transcribing = True
@@ -3574,54 +3691,66 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                 elif not is_same_language(src, dst, error_messages_callback=show_error_messages):
 
                     if embed_src == True and embed_dst == True:
-
-                        base, ext = os.path.splitext(media_filepath)
-                        tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
-                        tmp_embedded_media_filepath_2 = "{base}.embedded2.{format}".format(base=base, format=ext[1:])
-                        ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
-                        ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
-
-                        embedded_media_filepath = "{base}.{src}.{dst}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, dst=ffmpeg_dst_language_code, format=ext[1:])
-
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {file_display_name}...\n"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {media_file_display_name}...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                            result = subtitle_embedder(media_filepath)
+                            src_subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                            src_tmp_output = src_subtitle_embedder(media_filepath)
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1) and os.path.isfile(dst_subtitle_filepath):
+                            if os.path.isfile(src_tmp_output) and os.path.isfile(dst_subtitle_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into {file_display_name}...\n"
+                                msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into {media_file_display_name}...\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=tmp_embedded_media_filepath_2, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                                result = subtitle_embedder(tmp_embedded_media_filepath_1)
+                                src_dst_subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=src_dst_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                                src_dst_tmp_output = src_dst_subtitle_embedder(src_tmp_output)
 
-                            elif (not os.path.isfile(tmp_embedded_media_filepath_1)) and os.path.isfile(dst_subtitle_filepath):
+                            if os.path.isfile(src_dst_tmp_output):
+                                shutil.copy(src_dst_tmp_output, src_dst_embedded_media_filepath)
+
+                                if os.path.isfile(src_dst_tmp_output):
+                                    os.remove(src_dst_tmp_output)
+                                if os.path.isfile(src_tmp_output):
+                                    os.remove(src_tmp_output)
+
+                                if src_dst_embedded_media_filepath not in results:
+                                    results.append(src_dst_embedded_media_filepath)
+
+                            if os.path.isfile(src_dst_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into {file_display_name}...\n"
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {src_dst_embedded_media_filepath}\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                                subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=tmp_embedded_media_filepath_2, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                                result = subtitle_embedder(media_filepath)
 
-                            if os.path.isfile(tmp_embedded_media_filepath_2):
-                                shutil.copy(tmp_embedded_media_filepath_2, embedded_media_filepath)
-                                if os.path.isfile(tmp_embedded_media_filepath_1):
-                                    os.remove(tmp_embedded_media_filepath_1)
-                                if os.path.isfile(tmp_embedded_media_filepath_2):
-                                    os.remove(tmp_embedded_media_filepath_2)
+                                window_key = '-RESULTS-'
+                                msg = f"Results for {media_file_display_name} :\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                for result in results:
+                                    window_key = '-RESULTS-'
+                                    msg = f"{result}\n"
+                                    append_flag = True
+                                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = "\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                completed_tasks += 1
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
                             else:
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{src_subtitle_filepath}' and {src_subtitle_filepath} into {file_display_name} because '{ffmpeg_src_language_code}' and '{ffmpeg_dst_language_code}' subtitle stream already existed\n"
+                                msg = f"Unknown error\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
 
                         except Exception as e:
                             not_transcribing = True
@@ -3631,28 +3760,50 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         if not_transcribing: return
 
                     elif embed_src == True and embed_dst == False:
-
-                        base, ext = os.path.splitext(media_filepath)
-                        tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
-                        ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
-
-                        embedded_media_filepath = "{base}.{src}.embedded.{format}".format(base=base, src=ffmpeg_src_language_code, format=ext[1:])
-
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {file_display_name}...\n"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {media_file_display_name}...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                            result = subtitle_embedder(media_filepath)
+                            src_subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=src_subtitle_filepath, language=ffmpeg_src_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                            src_tmp_output = src_subtitle_embedder(media_filepath)
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1):
-                                shutil.copy(tmp_embedded_media_filepath_1, embedded_media_filepath)
-                                os.remove(tmp_embedded_media_filepath_1)
+                            if os.path.isfile(src_tmp_output):
+                                shutil.copy(src_tmp_output, src_embedded_media_filepath)
+                                os.remove(src_tmp_output)
+
+                                if src_embedded_media_filepath not in results:
+                                    results.append(src_embedded_media_filepath)
+
+                            if os.path.isfile(src_embedded_media_filepath):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {src_embedded_media_filepath}\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = f"Results for {media_file_display_name} :\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                for result in results:
+                                    window_key = '-RESULTS-'
+                                    msg = f"{result}\n"
+                                    append_flag = True
+                                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = "\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                completed_tasks += 1
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
                             else:
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{src_subtitle_filepath}' into {file_display_name} because '{ffmpeg_src_language_code}' subtitle stream already existed\n"
+                                msg = "Unknown error"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3664,28 +3815,50 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             if not_transcribing: return
 
                     elif embed_src == False and embed_dst == True:
-
-                        base, ext = os.path.splitext(media_filepath)
-                        tmp_embedded_media_filepath_1 = "{base}.embedded1.{format}".format(base=base, format=ext[1:])
-                        ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
-
-                        embedded_media_filepath = "{base}.{dst}.embedded.{format}".format(base=base, dst=ffmpeg_dst_language_code, format=ext[1:])
-
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into {file_display_name}...\n"
+                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into {media_file_display_name}...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                            subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=tmp_embedded_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
-                            result = subtitle_embedder(media_filepath)
+                            dst_subtitle_embedder = MediaSubtitleEmbedder(subtitle_path=dst_subtitle_filepath, language=ffmpeg_dst_language_code, output_path=src_tmp_embedded_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                            dst_tmp_output = dst_subtitle_embedder(media_filepath)
 
-                            if os.path.isfile(tmp_embedded_media_filepath_1):
-                                shutil.copy(tmp_embedded_media_filepath_1, embedded_media_filepath)
-                                os.remove(tmp_embedded_media_filepath_1)
+                            if os.path.isfile(dst_tmp_output):
+                                shutil.copy(dst_tmp_output, dst_embedded_media_filepath)
+                                os.remove(dst_tmp_output)
+
+                                if dst_embedded_media_filepath not in results:
+                                    results.append(dst_embedded_media_filepath)
+
+                            if os.path.isfile(dst_embedded_media_filepath):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"{media_file_display_name} subtitle embedded {media_type} file saved as :\n  {dst_embedded_media_filepath}\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = f"Results for {media_file_display_name} :\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                for result in results:
+                                    window_key = '-RESULTS-'
+                                    msg = f"{result}\n"
+                                    append_flag = True
+                                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                window_key = '-RESULTS-'
+                                msg = "\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                                completed_tasks += 1
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
                             else:
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Cannot embed '{dst_subtitle_filepath}' into {file_display_name} because '{ffmpeg_dst_language_code}' subtitle stream already existed\n"
+                                msg = "Unknown error"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3695,26 +3868,6 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             return
 
                             if not_transcribing: return
-
-                if embedded_media_filepath and os.path.isfile(embedded_media_filepath):
-                    window_key = '-PROGRESS-LOG-'
-                    msg = f"{file_display_name} subtitle embedded {media_type} file saved as :\n  {embedded_media_filepath}\n"
-                    append_flag = True
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                    window_key = '-RESULTS-'
-                    msg = f"{embedded_media_filepath}\n"
-                    append_flag = True
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                    completed_tasks += 1
-                    main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
-
-                window_key = '-RESULTS-'
-                msg = "\n"
-                append_flag = True
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
 
             except Exception as e:
                 not_transcribing = True
@@ -3729,7 +3882,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
 def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, embed_dst, force_recognize):
     global main_window, language, pool, thread_check_subtitle_stream, thread_transcribe, thread_transcribe_starter, \
-            removed_media_filepaths, completed_tasks  #, transcribe_completion_events
+            removed_media_filepaths, completed_tasks, proceed_list
 
     window_key = '-PROGRESS-LOG-'
     msg = ''
@@ -3741,24 +3894,19 @@ def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, e
     append_flag = False
     main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-    media_types = {media_filepath: check_file_type(media_filepath, error_messages_callback=show_error_messages) for media_filepath in media_filepaths}
-    #transcribe_completion_events = {media_filepath: threading.Event() for media_filepath in media_filepaths}
-    #pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in media_filepaths}
-
     removed_media_filepaths = []
     proceed_list = []
 
     for media_filepath in media_filepaths:
 
+        media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+
         if force_recognize == True:
-
-            media_type = check_file_type(media_filepath, error_messages_callback=show_error_messages)
-
             base, ext = os.path.splitext(media_filepath)
-            tmp_subtitle_removed_media_filepath_1 = "{base}.removed1.{format}".format(base=base, format=ext[1:])
-            subtitle_removed_media_filepath = "{base}.force_recognize.{format}".format(base=base, format=ext[1:])
+            tmp_subtitle_removed_media_filepath = "{base}.tmp.subtitles.removed.{format}".format(base=base, format=ext[1:])
+            subtitle_removed_media_filepath = "{base}.force.recognize.{format}".format(base=base, format=ext[1:])
 
-            subtitle_remover = MediaSubtitleRemover(output_path=tmp_subtitle_removed_media_filepath_1, progress_callback=show_progress, error_messages_callback=show_error_messages)
+            subtitle_remover = MediaSubtitleRemover(output_path=tmp_subtitle_removed_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
             tmp_output = subtitle_remover(media_filepath)
 
             if os.path.isfile(tmp_output):
@@ -3768,50 +3916,24 @@ def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, e
                 proceed_list.append(subtitle_removed_media_filepath)
 
                 window_key = '-PROGRESS-LOG-'
-                msg = f"Removing subtitle streams from {media_type} file...\n"
-                append_flag = False
+                msg = f"Removing all subtitle streams from {media_file_display_name} and save as :\n  {subtitle_removed_media_filepath}\n"
+                append_flag = True
                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                window_key = '-PROGRESS-LOG-'
-                msg = f"Subtitle removed {media_type} file saved as :\n  {subtitle_removed_media_filepath}\n"
-                append_flag = False
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
-                '''
-                window_key = '-PROGRESS-LOG-'
-                msg = "\n"
-                append_flag = False
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-                '''
-
-                #transcribe_completion_events[media_filepath] = threading.Event()
 
         else:
-
             proceed_list = media_filepaths
 
 
     if proceed_list:
 
-        media_types = {media_filepath: check_file_type(media_filepath, error_messages_callback=show_error_messages) for media_filepath in proceed_list}
-        pool = {}
         pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in proceed_list}
-        #transcribe_completion_events = {}
-
-        #for e in check_subtitle_stream_completion_events:
-        #    print(f"e = {e}")
-
+        media_types = {media_filepath: check_file_type(media_filepath, error_messages_callback=show_error_messages) for media_filepath in proceed_list}
+        
         for media_filepath in proceed_list:
+
             if os.path.isfile(media_filepath):
-                media_type = check_file_type(media_filepath, error_messages_callback=show_error_messages)
-
-                #print(f"check_subtitle_stream_completion_events[{media_filepath}].is_set() = {check_subtitle_stream_completion_events[media_filepath].is_set()}")
-                #transcribe_completion_events[media_filepath] = threading.Event()
-
-                thread_transcribe = Thread(target=transcribe, args=(src, dst, media_filepath, media_type, subtitle_format, embed_src, embed_dst, force_recognize), daemon=True)
+                thread_transcribe = Thread(target=transcribe, args=(src, dst, media_filepath, media_types[media_filepath], subtitle_format, embed_src, embed_dst, force_recognize), daemon=True)
                 thread_transcribe.start()
-                #transcribe_completion_events[media_filepath].wait()
-
 
 
 #------------------------------------------------------------ MAIN FUNCTION ------------------------------------------------------------#
@@ -3878,8 +4000,8 @@ def main():
     parser.add_argument('-ll', '--list-languages', help="List all supported languages", action='store_true')
     parser.add_argument('-F', '--format', help="Desired subtitle format", default="srt")
     parser.add_argument('-lf', '--list-formats', help="List all supported subtitle formats", action='store_true')
-    parser.add_argument('-es', '--embed-src', help="Boolean value (True or False) for embed_src subtitle file into video file", type=bool, default=False)
-    parser.add_argument('-ed', '--embed-dst', help="Boolean value (True or False) for embed_src subtitle file into video file", type=bool, default=False)
+    parser.add_argument('-es', '--embed-src', help="Boolean value (True or False) for embed_src subtitles file into video file", type=bool, default=False)
+    parser.add_argument('-ed', '--embed-dst', help="Boolean value (True or False) for embed_src subtitles file into video file", type=bool, default=False)
     parser.add_argument('-fr', '--force-recognize', help="Boolean value (True or False) for re-recognize media file event if it's already has subtitles stream", type=bool, default=False)
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
@@ -3987,11 +4109,6 @@ def main():
             msg = "No any files matching filenames you typed"
             sg.Popup(msg, title="Info", line_width=100, any_key_closes=True)
 
-    '''
-    for media_filepath in sg_listbox_values:
-        if ".embedded." in str(media_filepath):
-            sg_listbox_values.remove(media_filepath)
-    '''
 
     if args.src_language:
         if args.src_language not in language.name_of_code.keys():
@@ -4080,7 +4197,7 @@ def main():
                 [
                     sg.Text('Subtitle format', size=(18,1)),
                     sg.Combo(list(SubtitleFormatter.supported_formats), default_value=sg_combo_subtitle_format_values, enable_events=True, key='-SUBTITLE-FORMAT-'),
-                    sg.Checkbox("Force recognize", default=embed_dst, key='-FORCE-RECOGNIZE-')
+                    sg.Checkbox("Force recognize", default=force_recognize, key='-FORCE-RECOGNIZE-')
                 ],
                 [
                     sg.Text('URL', size=(18,1)),
@@ -4341,13 +4458,6 @@ def main():
                             filepaths[i] = filepaths[i].replace("\\", "/")
 
                 if filepaths:
-                    '''
-                    for file in filepaths:
-                        if ".embedded." in str(file):
-                            filepaths.remove(file)
-                            msg = "{} is already a subtitles embedded media file".format(file)
-                            sg.Popup(msg, title="Info", line_width=100, any_key_closes=False)
-                    '''
                     for file in filepaths:
                         file = file.replace("\\", "/")
                         if file not in sg_listbox_values:
@@ -4486,7 +4596,7 @@ def main():
 
             if not not_transcribing:
                 pb = values[event]
-                file_display_name = pb[0]
+                media_file_display_name = pb[0]
                 info = pb[1]
                 total = pb[2]
                 percentage = pb[3]
@@ -4496,7 +4606,7 @@ def main():
                     time_str = "ETA  : " + pb[5] + ":" + pb[6] + ":" + pb[7] 
                 if progress == total:
                     time_str = "Time : " + pb[5] + ":" + pb[6] + ":" + pb[7] 
-                main_window['-FILE-DISPLAY-NAME-'].update("Processing " + file_display_name)
+                main_window['-FILE-DISPLAY-NAME-'].update("Processing " + media_file_display_name)
                 main_window['-INFO-'].update(info)
                 main_window['-PERCENTAGE-'].update(percentage)
                 main_window['-PROGRESS-'].update(progress)
