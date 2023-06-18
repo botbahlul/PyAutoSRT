@@ -61,27 +61,35 @@ python setup.py install
 ### Usage 
 
 ```
-usage: pyautosrt [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-ll] [-F FORMAT] [-lf] [-v] [source_path ...]
+usage: pyautosrt [-h] [-S SRC_LANGUAGE] [-D DST_LANGUAGE] [-ll] [-F FORMAT] [-lf] [-es EMBED_SRC] [-ed EMBED_DST]
+                     [-fr FORCE_RECOGNIZE] [-v]
+                     [source_path ...]
 
 positional arguments:
   source_path           Path to the video or audio files to generate subtitle (use wildcard for multiple files or separate them with
-                        space eg. "file 1.mp4" "file 2.mp4")
+                        a space character e.g. "file 1.mp4" "file 2.mp4")
 
 options:
   -h, --help            show this help message and exit
   -S SRC_LANGUAGE, --src-language SRC_LANGUAGE
-                        Spoken language
+                        Language code of the audio language spoken in video/audio source_path
   -D DST_LANGUAGE, --dst-language DST_LANGUAGE
-                        Desired language for translation
+                        Desired translation language code for the subtitles
   -ll, --list-languages
-                        List all available source/translation languages
+                        List all supported languages
   -F FORMAT, --format FORMAT
                         Desired subtitle format
-  -lf, --list-formats   List all available subtitle formats
+  -lf, --list-formats   List all supported subtitle formats
+  -es EMBED_SRC, --embed-src EMBED_SRC
+                        Boolean value (True or False) for embed_src subtitles file into video file
+  -ed EMBED_DST, --embed-dst EMBED_DST
+                        Boolean value (True or False) for embed_src subtitles file into video file
+  -fr FORCE_RECOGNIZE, --force-recognize FORCE_RECOGNIZE
+                        Boolean value (True or False) for re-recognize media file event if it's already has subtitles stream
   -v, --version         show program's version number and exit
 ```
 
-Those command switches \'-S\', \'-D\', and \'-F\' are not mandatory. They just make combobox directly select your desired options if you prefer to type it rather that click on combobox.
+Those command switches \'-S\', \'-D\', and \'-F\' are not mandatory. They just make combobox directly select your desired options if you prefer to type it rather that click on combobox. Please note that these arguments are only work if you install this app with pip (won't work if you run that executable from releases zip file).
 
 UPDATE NOTES : SINCE VERSION 0.1.1 YOU CAN SELECT MULTIPLE VIDEO/AUDIO FILES, BUT REMEMBER THAT ALL FILES YOU SELECT SHOULD HAVE SAME AUDIO LANGUAGE AND DESIRED TRANSLATION LANGUAGE.
 
