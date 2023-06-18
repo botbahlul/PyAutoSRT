@@ -41,7 +41,7 @@ import shlex
 #warnings.filterwarnings("ignore", category=RuntimeWarning)
 #sys.tracebacklimit = 0
 
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 
 
 #======================================================== ffmpeg_progress_yield ========================================================#
@@ -399,12 +399,15 @@ def check_file_type(file_path, error_messages_callback=None):
     try:
         if "\\" in file_path:
             file_path = file_path.replace("\\", "/")
-        ffprobe_cmd = ['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-print_format', 'json', file_path]
+
+        ffprobe_cmd = ['ffprobe', '-v', '-1', '-loglevel', '-1', '-hide_banner', '-show_format', '-show_streams', '-print_format', 'json', file_path]
         output = None
+
         if sys.platform == "win32":
-            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
         else:
-            output = subprocess.check_output(ffprobe_cmd, stderr=subprocess.PIPE).decode('utf-8')
+            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE).decode('utf-8')
+
         data = json.loads(output)
 
         if 'streams' in data:
@@ -1125,8 +1128,8 @@ class Language:
 class WavConverter:
     @staticmethod
     def which(program):
-        def is_exe(media_filepath):
-            return os.path.isfile(media_filepath) and os.access(media_filepath, os.X_OK)
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
         fpath, _ = os.path.split(program)
         if fpath:
             if is_exe(program):
@@ -1174,12 +1177,13 @@ class WavConverter:
 
         ffmpeg_command = [
                             "ffmpeg",
+                            "-hide_banner",
+                            "-loglevel", "-1",
+                            "-v", "-1",
                             "-y",
                             "-i", media_filepath,
                             "-ac", str(self.channels),
                             "-ar", str(self.rate),
-                            "-loglevel", "error",
-                            "-hide_banner",
                             "-progress", "-", "-nostats",
                             temp.name
                          ]
@@ -1203,19 +1207,20 @@ class WavConverter:
                     self.progress_callback(info, media_file_display_name, percentage, start_time)
             '''
 
+
             # RUNNING ffmpeg_command WITHOUT ffmpeg_progress_yield
-            ffprobe_command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
+            ffprobe_command = f'ffprobe -v -1 -loglevel -1 -hide_banner -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
 
             if sys.platform == "win32":
-                ffprobe_process = subprocess.Popen(ffprobe_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                ffprobe_process = subprocess.Popen(ffprobe_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True)
 
-            total_duration = float(ffprobe_process.stdout.read().decode('utf-8').strip())
+            total_duration = float(ffprobe_process.strip())
 
-
+            process = None
             if sys.platform == "win32":
-                process = subprocess.Popen(ffmpeg_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -1355,11 +1360,13 @@ class FLACConverter(object):
             temp = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
             command = [
                         "ffmpeg",
+                        "-hide_banner",
+                        "-loglevel", "-1",
+                        "-v", "-1",
                         "-ss", str(start),
                         "-t", str(end - start),
                         "-y",
                         "-i", self.wav_filepath,
-                        "-loglevel", "error",
                         temp.name
                       ]
             if sys.platform == "win32":
@@ -1729,7 +1736,9 @@ class SubtitleStreamParser:
     def get_subtitle_streams(self, media_filepath):
         ffprobe_cmd = [
                         'ffprobe',
-                        '-v', 'quiet',
+                        '-hide_banner',
+                        '-v', '-1',
+                        '-loglevel', '-1',
                         '-print_format', 'json',
                         '-show_entries', 'stream=index:stream_tags=language',
                         '-select_streams', 's',
@@ -1737,7 +1746,12 @@ class SubtitleStreamParser:
                       ]
 
         try:
-            result = subprocess.run(ffprobe_cmd, capture_output=True, text=True)
+            result = None
+            if sys.platform == "win32":
+                result = subprocess.run(ffprobe_cmd, stdin=open(os.devnull), capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                result = subprocess.run(ffprobe_cmd, stdin=open(os.devnull), capture_output=True, text=True)
+
             output = result.stdout
 
             streams = json.loads(output)['streams']
@@ -1777,6 +1791,9 @@ class SubtitleStreamParser:
     def get_timed_subtitles(self, media_filepath, subtitle_stream_index):
         ffmpeg_cmd = [
                         'ffmpeg',
+                        '-hide_banner',
+                        '-loglevel', '-1',
+                        '-v', '-1',
                         '-i', media_filepath,
                         '-map', f'0:s:{subtitle_stream_index-1}',
                         '-f', 'srt',
@@ -1784,7 +1801,12 @@ class SubtitleStreamParser:
                      ]
 
         try:
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            result = None
+            if sys.platform == "win32":
+                result = subprocess.run(ffmpeg_cmd, stdin=open(os.devnull), capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                result = subprocess.run(ffmpeg_cmd, stdin=open(os.devnull), capture_output=True, text=True)
+
             output = result.stdout
 
             timed_subtitles = []
@@ -1935,6 +1957,9 @@ class MediaSubtitleRenderer:
             scale_switch = "'trunc(iw/2)*2'\:'trunc(ih/2)*2'"
             ffmpeg_command = [
                                 "ffmpeg",
+                                "-hide_banner",
+                                "-loglevel", "-1",
+                                "-v", "-1",
                                 "-y",
                                 "-i", media_filepath,
                                 "-vf", f"subtitles={shlex.quote(subtitle_path_str)},scale={scale_switch}",
@@ -1961,18 +1986,19 @@ class MediaSubtitleRenderer:
             '''
 
             # RUNNING ffmpeg_command WITHOUT ffmpeg_progress_yield
-            ffprobe_command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
+            ffprobe_command = f'ffprobe -v -1 -loglevel -1 -hide_banner -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
 
             if sys.platform == "win32":
-                ffprobe_process = subprocess.Popen(ffprobe_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                ffprobe_process = subprocess.Popen(ffprobe_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True)
 
-            total_duration = float(ffprobe_process.stdout.read().decode('utf-8').strip())
+            total_duration = float(ffprobe_process.strip())
 
 
+            process = None
             if sys.platform == "win32":
-                process = subprocess.Popen(ffmpeg_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -2017,8 +2043,8 @@ class MediaSubtitleRenderer:
 class MediaSubtitleEmbedder:
     @staticmethod
     def which(program):
-        def is_exe(media_filepath):
-            return os.path.isfile(media_filepath) and os.access(media_filepath, os.X_OK)
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
         fpath, _ = os.path.split(program)
         if fpath:
             if is_exe(program):
@@ -2053,17 +2079,20 @@ class MediaSubtitleEmbedder:
 
         command = [
                     'ffprobe',
-                    '-v', 'quiet',
+                    '-hide_banner',
+                    '-v', '-1',
+                    '-loglevel', '-1',
                     '-of', 'json',
                     '-show_entries',
                     'format:stream',
                     media_filepath
                   ]
 
+        output = None
         if sys.platform == "win32":
-            output = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, universal_newlines=True)
+            output = subprocess.run(command, stdin=open(os.devnull), stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         else:
-            output = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            output = subprocess.run(command, stdin=open(os.devnull), stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
         metadata = json.loads(output.stdout)
         streams = metadata['streams']
@@ -2117,6 +2146,9 @@ class MediaSubtitleEmbedder:
 
                 ffmpeg_command = [
                                     'ffmpeg',
+                                    '-hide_banner',
+                                    '-loglevel', '-1',
+                                    '-v', '-1',
                                     '-y',
                                     '-i', media_filepath,
                                     '-sub_charenc', 'UTF-8',
@@ -2131,8 +2163,9 @@ class MediaSubtitleEmbedder:
                                     self.output_path
                                  ]
 
+                subtitle_file_display_name = os.path.basename(self.subtitle_path).split('/')[-1]
                 media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
-                info = f"Embedding subtitles file into '{media_file_display_name}'"
+                info = f"Embedding '{self.language}' subtitles file '{subtitle_file_display_name}' into '{media_file_display_name}'"
                 start_time = time.time()
 
                 '''
@@ -2146,18 +2179,19 @@ class MediaSubtitleEmbedder:
                 '''
 
                 # RUNNING ffmpeg_command WITHOUT ffmpeg_progress_yield
-                ffprobe_command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
+                ffprobe_command = f'ffprobe -v -1 -loglevel -1 -hide_banner -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
 
                 if sys.platform == "win32":
-                    ffprobe_process = subprocess.Popen(ffprobe_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                    ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 else:
-                    ffprobe_process = subprocess.Popen(ffprobe_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True)
 
-                total_duration = float(ffprobe_process.stdout.read().decode('utf-8').strip())
+                total_duration = float(ffprobe_process.strip())
 
 
+                process = None
                 if sys.platform == "win32":
-                    process = subprocess.Popen(ffmpeg_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                    process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 else:
                     process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -2207,8 +2241,8 @@ class MediaSubtitleEmbedder:
 class MediaSubtitleRemover:
     @staticmethod
     def which(program):
-        def is_exe(media_filepath):
-            return os.path.isfile(media_filepath) and os.access(media_filepath, os.X_OK)
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
         fpath, _ = os.path.split(program)
         if fpath:
             if is_exe(program):
@@ -2257,6 +2291,9 @@ class MediaSubtitleRemover:
         try:
             ffmpeg_command = [
                                 'ffmpeg',
+                                '-hide_banner',
+                                '-loglevel', '-1',
+                                '-v', '-1',
                                 '-y',
                                 '-i', media_filepath,
                                 '-c', 'copy',
@@ -2281,18 +2318,18 @@ class MediaSubtitleRemover:
 
 
             # RUNNING ffmpeg_command WITHOUT ffmpeg_progress_yield
-            ffprobe_command = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
+            ffprobe_command = f'ffprobe -v -1 -loglevel -1 -hide_banner -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{media_filepath}"'
 
             if sys.platform == "win32":
-                ffprobe_process = subprocess.Popen(ffprobe_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                ffprobe_process = subprocess.Popen(ffprobe_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                ffprobe_process = subprocess.check_output(ffprobe_command, stdin=open(os.devnull), universal_newlines=True)
 
-            total_duration = float(ffprobe_process.stdout.read().decode('utf-8').strip())
+            total_duration = float(ffprobe_process.strip())
 
-
+            process = None
             if sys.platform == "win32":
-                process = subprocess.Popen(ffmpeg_command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+                process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -2541,11 +2578,13 @@ def record_streaming_windows(hls_url, media_filepath, error_messages_callback=No
     try:
         ffmpeg_cmd = [
                         'ffmpeg',
+                        '-hide_banner',
+                        '-loglevel', '-1',
+                        '-v', '-1',
                         '-y',
                         '-i', hls_url,
                         '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov',
                         '-fflags', 'nobuffer',
-                        '-loglevel', '-1',
                         media_filepath
                      ]
 
@@ -2583,7 +2622,19 @@ def record_streaming_linux(url, output_file, error_messages_callback=None):
     global recognizing, ffmpeg_start_run_time, first_streaming_duration_recorded, main_window
 
     #ffmpeg_cmd = ['ffmpeg', '-y', '-i', url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', output_file]
-    ffmpeg_cmd = ['ffmpeg', '-y', '-i', f'{url}',  '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov', '-fflags', 'nobuffer', f'{output_file}']
+    ffmpeg_cmd = [
+                    'ffmpeg',
+                    '-hide_banner',
+                    '-loglevel', '-1',
+                    '-v', '-1',
+                    '-y',
+                    '-i', f'{url}',
+                    '-movflags',
+                    '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov',
+                    '-fflags',
+                    'nobuffer',
+                    f'{output_file}'
+                 ]
 
     ffmpeg_start_run_time = datetime.now()
 
@@ -2814,6 +2865,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                     base, ext = os.path.splitext(media_filepath)
                     src_subtitle_filepath = f"{base}.{src}.{subtitle_format}"
+                    src_subtitle_file_display_name = os.path.basename(src_subtitle_filepath).split('/')[-1]
 
                     writer = SubtitleWriter(subtitle_stream_regions, subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                     writer.write(src_subtitle_filepath)
@@ -2970,6 +3022,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                     base, ext = os.path.splitext(media_filepath)
                     dst_subtitle_filepath = f"{base}.{dst}.{subtitle_format}"
+                    dst_subtitle_file_display_name = os.path.basename(dst_subtitle_filepath).split('/')[-1]
 
                     writer = SubtitleWriter(subtitle_stream_regions, subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                     writer.write(dst_subtitle_filepath)
@@ -3071,6 +3124,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                         base, ext = os.path.splitext(media_filepath)
                         src_subtitle_filepath = f"{base}.{src}.{subtitle_format}"
+                        src_subtitle_file_display_name = os.path.basename(src_subtitle_filepath).split('/')[-1]
 
                         translation_writer = SubtitleWriter(subtitle_stream_regions, translated_subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                         translation_writer.write(src_subtitle_filepath)
@@ -3105,11 +3159,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
 
                             base, ext = os.path.splitext(media_filepath)
+
                             src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{ext[1:]}"
+                            src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
+
                             src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{ext[1:]}"
+                            src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into '{media_file_display_name}'"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into '{media_file_display_name}'"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3138,6 +3196,11 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                                 return
 
                             if os.path.isfile(src_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{src_tmp_embedded_media_file_display_name}' to {src_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(src_tmp_output, src_embedded_media_filepath)
                                 os.remove(src_tmp_output)
 
@@ -3146,7 +3209,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(src_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3245,6 +3308,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                         base, ext = os.path.splitext(media_filepath)
                         dst_subtitle_filepath = f"{base}.{dst}.{subtitle_format}"
+                        dst_subtitle_file_display_name = os.path.basename(dst_subtitle_filepath).split('/')[-1]
 
                         translation_writer = SubtitleWriter(subtitle_stream_regions, translated_subtitle_stream_transcripts, subtitle_format, error_messages_callback=show_error_messages)
                         translation_writer.write(dst_subtitle_filepath)
@@ -3283,11 +3347,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
 
                             base, ext = os.path.splitext(media_filepath)
+
                             dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                            dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
+
                             dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                            dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file into '{media_file_display_name}'"
+                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file '{dst_subtitle_file_display_name}' into '{media_file_display_name}'"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3316,12 +3384,17 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                                 return
 
                             if os.path.isfile(dst_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{dst_tmp_embedded_media_file_display_name}' to {dst_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(dst_tmp_output, dst_embedded_media_filepath)
                                 os.remove(dst_tmp_output)
 
                             if os.path.isfile(dst_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{dst_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{dst_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3392,11 +3465,16 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
         base, ext = os.path.splitext(media_filepath)
         src_subtitle_filepath = f"{base}.{src}.{subtitle_format}"
+        src_subtitle_file_display_name = os.path.basename(src_subtitle_filepath).split('/')[-1]
         if os.path.isfile(src_subtitle_filepath): os.remove(src_subtitle_filepath)
+
+        dst_subtitle_filepath = None
+        dst_subtitle_file_display_name = None
 
         if not is_same_language(src, dst, error_messages_callback=show_error_messages):
             base, ext = os.path.splitext(media_filepath)
             dst_subtitle_filepath = f"{base}.{dst}.{subtitle_format}"
+            dst_subtitle_file_display_name = os.path.basename(dst_subtitle_filepath).split('/')[-1]
             if os.path.isfile(dst_subtitle_filepath): os.remove(dst_subtitle_filepath)
 
         regions = None
@@ -3753,19 +3831,32 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                 ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
 
                 base, ext = os.path.splitext(media_filepath)
+
                 src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{ext[1:]}"
+                src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
+
                 dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
+
                 src_dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                src_dst_tmp_embedded_media_file_display_name = os.path.basename(src_dst_tmp_embedded_media_filepath).split('/')[-1]
+
                 src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{ext[1:]}"
+                src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
+
                 dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
+
                 src_dst_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                src_dst_embedded_media_file_display_name = os.path.basename(src_dst_embedded_media_filepath).split('/')[-1]
+                
 
                 if is_same_language(src, dst, error_messages_callback=show_error_messages):
 
                     if embed_src == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into {media_type}...\n"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into {media_file_display_name}...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3773,6 +3864,11 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             src_tmp_output = subtitle_embedder(media_filepath)
 
                             if os.path.isfile(src_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{src_tmp_embedded_media_file_display_name}' to {src_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(src_tmp_output, src_embedded_media_filepath)
                                 os.remove(src_tmp_output)
 
@@ -3781,7 +3877,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(src_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3821,7 +3917,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     if embed_src == True and embed_dst == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into '{media_file_display_name}'...\n"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3830,7 +3926,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(src_tmp_output) and os.path.isfile(dst_subtitle_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into '{media_file_display_name}'...\n"
+                                msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file '{dst_subtitle_file_display_name}' into '{src_tmp_embedded_media_file_display_name}'...\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3838,6 +3934,11 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                                 src_dst_tmp_output = src_dst_subtitle_embedder(src_tmp_output)
 
                             if os.path.isfile(src_dst_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{src_dst_tmp_embedded_media_file_display_name}' to {src_dst_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(src_dst_tmp_output, src_dst_embedded_media_filepath)
 
                                 if os.path.isfile(src_dst_tmp_output):
@@ -3850,10 +3951,9 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(src_dst_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{src_dst_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{src_dst_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
-
 
                                 window_key = '-RESULTS-'
                                 msg = f"Results for '{media_file_display_name}' :\n"
@@ -3890,7 +3990,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     elif embed_src == True and embed_dst == False:
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles into '{media_file_display_name}'...\n"
+                            msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3898,6 +3998,11 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             src_tmp_output = src_subtitle_embedder(media_filepath)
 
                             if os.path.isfile(src_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{src_tmp_embedded_media_file_display_name}' to {src_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(src_tmp_output, src_embedded_media_filepath)
                                 os.remove(src_tmp_output)
 
@@ -3906,7 +4011,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(src_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{src_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3945,7 +4050,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     elif embed_src == False and embed_dst == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
-                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles into '{media_file_display_name}'...\n"
+                            msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file '{dst_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
                             append_flag = True
                             main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
@@ -3953,6 +4058,11 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                             dst_tmp_output = dst_subtitle_embedder(media_filepath)
 
                             if os.path.isfile(dst_tmp_output):
+                                window_key = '-PROGRESS-LOG-'
+                                msg = f"Copying '{dst_tmp_embedded_media_file_display_name}' to {dst_embedded_media_file_display_name}...\n"
+                                append_flag = True
+                                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
                                 shutil.copy(dst_tmp_output, dst_embedded_media_filepath)
                                 os.remove(dst_tmp_output)
 
@@ -3961,7 +4071,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             if os.path.isfile(dst_embedded_media_filepath):
                                 window_key = '-PROGRESS-LOG-'
-                                msg = f"'{media_file_display_name}' subtitle embedded {media_type} file saved as :\n  '{dst_embedded_media_filepath}'\n"
+                                msg = f"'{media_file_display_name}' subtitles embedded {media_type} file saved as :\n  '{dst_embedded_media_filepath}'\n"
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
