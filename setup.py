@@ -32,9 +32,6 @@ install_requires=[
     "urllib3>=1.26.0,<3.0",
 ]
 
-if platform.system == "Windows":
-    install_requires.append("pywin32>=306")
-
 setup(
     name="pyautosrt",
     version=VERSION,
