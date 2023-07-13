@@ -42,7 +42,7 @@ import shlex
 #sys.tracebacklimit = 0
 
 
-VERSION = "0.2.8"
+VERSION = "0.2.9"
 
 
 class Language:
@@ -799,10 +799,10 @@ class WavConverter:
 
         if not os.path.isfile(media_filepath):
             if self.error_messages_callback:
-                self.error_messages_callback(f"The given file does not exist: {media_filepath}")
+                self.error_messages_callback(f"The given file does not exist: '{media_filepath}'")
             else:
-                print(f"The given file does not exist: {media_filepath}")
-                raise Exception(f"Invalid file: {media_filepath}")
+                print(f"The given file does not exist: '{media_filepath}'")
+                raise Exception(f"Invalid file: '{media_filepath}'")
 
         if not self.ffprobe_check():
             if self.error_messages_callback:
@@ -1065,7 +1065,7 @@ class FLACConverter(object):
 
 
 class SpeechRecognizer(object):
-    def __init__(self, language="en", rate=44100, retries=3, api_key="AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw", timeout=30, error_messages_callback=None):
+    def __init__(self, language="en", rate=48000, retries=3, api_key="AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw", timeout=30, error_messages_callback=None):
         self.language = language
         self.rate = rate
         self.api_key = api_key
@@ -1076,8 +1076,8 @@ class SpeechRecognizer(object):
     def __call__(self, data):
         try:
             for i in range(self.retries):
-                url = "http://www.google.com/speech-api/v2/recognize?client=chromium&lang={lang}&key={key}".format(lang=self.language, key=self.api_key)
-                headers = {"Content-Type": "audio/x-flac rate=%d" % self.rate}
+                url = f"http://www.google.com/speech-api/v2/recognize?client=chromium&lang={self.language}&key={self.api_key}"
+                headers = {"Content-Type": "audio/x-flac rate=%d" %self.rate}
 
                 try:
                     resp = requests.post(url, data=data, headers=headers, timeout=self.timeout)
@@ -1295,7 +1295,7 @@ class SubtitleWriter:
             if saved_subtitle_filepath:
                 subtitle_file_base, subtitle_file_ext = os.path.splitext(saved_subtitle_filepath)
                 if not subtitle_file_ext:
-                    saved_subtitle_filepath = "{base}.{format}".format(base=subtitle_file_base, format=self.format)
+                    saved_subtitle_filepath = f"{subtitle_file_base}.{self.format}"
                 else:
                     saved_subtitle_filepath = declared_subtitle_filepath
             with open(saved_subtitle_filepath, 'wb') as f:
@@ -1640,10 +1640,10 @@ class MediaSubtitleRenderer:
 
         if not os.path.isfile(media_filepath):
             if self.error_messages_callback:
-                self.error_messages_callback(f"The given file does not exist: {media_filepath}")
+                self.error_messages_callback(f"The given file does not exist: '{media_filepath}'")
             else:
-                print(f"The given file does not exist: {media_filepath}")
-                raise Exception(f"Invalid file: {media_filepath}")
+                print(f"The given file does not exist: '{media_filepath}'")
+                raise Exception(f"Invalid file: '{media_filepath}'")
 
         if not self.ffprobe_check():
             if self.error_messages_callback:
@@ -1827,10 +1827,10 @@ class MediaSubtitleEmbedder:
 
         if not os.path.isfile(media_filepath):
             if self.error_messages_callback:
-                self.error_messages_callback(f"The given file does not exist: {media_filepath}")
+                self.error_messages_callback(f"The given file does not exist: '{media_filepath}'")
             else:
-                print(f"The given file does not exist: {media_filepath}")
-                raise Exception(f"Invalid file: {media_filepath}")
+                print(f"The given file does not exist: '{media_filepath}'")
+                raise Exception(f"Invalid file: '{media_filepath}'")
 
         if not self.ffprobe_check():
             if self.error_messages_callback:
@@ -1850,7 +1850,7 @@ class MediaSubtitleEmbedder:
             existing_languages = self.get_existing_subtitle_language(media_filepath)
             if self.language in existing_languages:
                 # THIS 'print' THINGS WILL MAKE progresbar screwed up!
-                #msg = (f"'{self.language}' subtitle stream already existed in {media_filepath}")
+                #msg = (f"'{self.language}' subtitle stream already existed in '{media_filepath}'")
                 #if self.error_messages_callback:
                 #    self.error_messages_callback(msg)
                 #else:
@@ -1997,10 +1997,10 @@ class MediaSubtitleRemover:
 
         if not os.path.isfile(media_filepath):
             if self.error_messages_callback:
-                self.error_messages_callback(f"The given file does not exist: {media_filepath}")
+                self.error_messages_callback(f"The given file does not exist: '{media_filepath}'")
             else:
-                print(f"The given file does not exist: {media_filepath}")
-                raise Exception(f"Invalid file: {media_filepath}")
+                print(f"The given file does not exist: '{media_filepath}'")
+                raise Exception(f"Invalid file: '{media_filepath}'")
 
         if not self.ffprobe_check():
             if self.error_messages_callback:
@@ -2216,10 +2216,10 @@ def check_file_type(media_filepath, error_messages_callback=None):
 
     if not os.path.isfile(media_filepath):
         if error_messages_callback:
-           error_messages_callback(f"The given file does not exist: {media_filepath}")
+           error_messages_callback(f"The given file does not exist: '{media_filepath}'")
         else:
-            print(f"The given file does not exist: {media_filepath}")
-            raise Exception(f"Invalid file: {media_filepath}")
+            print(f"The given file does not exist: '{media_filepath}'")
+            raise Exception(f"Invalid file: '{media_filepath}'")
     if not ffprobe_check():
         if error_messages_callback:
             error_messages_callback("Cannot find ffprobe executable")
@@ -2335,9 +2335,6 @@ def scroll_to_last_line(window, element):
 
 def set_right_click_menu(element, enabled):
     if enabled:
-        #print("element = {}".format(element))
-        #print("enabled = {}".format(enabled))
-
         if isinstance(element, sg.Input):
             widget = element.Widget
         elif isinstance(element, sg.Multiline):
@@ -2379,7 +2376,6 @@ def is_streaming_url(url, error_messages_callback=None):
     streamlink = Streamlink()
 
     if is_valid_url(url):
-        #print("is_valid_url(url) = {}".format(is_valid_url(url)))
         try:
             os.environ['STREAMLINK_DIR'] = './streamlink/'
             os.environ['STREAMLINK_PLUGINS'] = './streamlink/plugins/'
@@ -2387,59 +2383,47 @@ def is_streaming_url(url, error_messages_callback=None):
 
             streams = streamlink.streams(url)
             if streams:
-                #print("is_streams = {}".format(True))
                 return True
             else:
-                #print("is_streams = {}".format(False))
                 return False
 
         except OSError:
-            #print("is_streams = OSError")
             if error_messages_callback:
                 error_messages_callback("OSError")
             return False
         except ValueError:
-            #print("is_streams = ValueError")
             if error_messages_callback:
                 error_messages_callback("ValueError")
             return False
         except KeyError:
-            #print("is_streams = KeyError")
             if error_messages_callback:
                 error_messages_callback("KeyError")
             return False
         except RuntimeError:
-            #print("is_streams = RuntimeError")
             if error_messages_callback:
                 error_messages_callback("RuntimeError")
             return False
         except NoPluginError:
-            #print("is_streams = NoPluginError")
             if error_messages_callback:
                 error_messages_callback("NoPluginError")
             return False
         except StreamlinkError:
             return False
-            #print("is_streams = StreamlinkError")
             if error_messages_callback:
                 error_messages_callback("StreamlinkError")
         except StreamError:
             return False
-            #print("is_streams = StreamlinkError")
             if error_messages_callback:
                 error_messages_callback("StreamError")
         except NotImplementedError:
-            #print("is_streams = NotImplementedError")
             if error_messages_callback:
                 error_messages_callback("NotImplementedError")
             return False
         except Exception as e:
-            #print("is_streams = {}".format(e))
             if error_messages_callback:
                 error_messages_callback(e)
             return False
     else:
-        #print("is_valid_url(url) = {}".format(is_valid_url(url)))
         return False
 
 
@@ -2568,10 +2552,10 @@ def record_streaming_linux(url, output_file, error_messages_callback=None):
 
                     if i == 0:
                         ffmpeg_start_write_time = datetime.now()
-                        #print("ffmpeg_start_write_time = {}".format(ffmpeg_start_write_time))
+                        #print(f"ffmpeg_start_write_time = {ffmpeg_start_write_time}")
 
                         first_streaming_duration_recorded = datetime.strptime(str(time_value), "%H:%M:%S.%f") - datetime(1900, 1, 1)
-                        #print("first_streaming_duration_recorded = {}".format(first_streaming_duration_recorded))
+                        #print(f"first_streaming_duration_recorded = {first_streaming_duration_recorded}")
 
                         # MAKE SURE THAT first_streaming_duration_recorded EXECUTED ONLY ONCE
                         i += 1
@@ -2582,10 +2566,10 @@ def record_streaming_linux(url, output_file, error_messages_callback=None):
                         time_value_file = open(time_value_filepath, "w")
                         time_value_file.write(str(time_value))
                         time_value_file.close()
-                        #print("time_value = {}".format(time_value))
+                        #print(f"time_value = {time_value}")
 
                     streaming_duration_recorded = datetime.strptime(str(time_value), "%H:%M:%S.%f") - datetime(1900, 1, 1)
-                    #print("streaming_duration_recorded = {}".format(streaming_duration_recorded))
+                    #print(f"streaming_duration_recorded = {streaming_duration_recorded}")
                     main_window.write_event_value('-EVENT-STREAMING-DURATION-RECORDED-', streaming_duration_recorded)
 
                 # Restart the timer to check for new output
@@ -3050,10 +3034,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             base, ext = os.path.splitext(media_filepath)
 
-                            src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{ext[1:]}"
+                            if ext[1:] == "ts":
+                                media_format = "mp4"
+                            else:
+                                media_format = ext[1:]
+
+                            src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{media_format}"
                             src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
 
-                            src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{ext[1:]}"
+                            src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{media_format}"
                             src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
@@ -3238,10 +3227,15 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             base, ext = os.path.splitext(media_filepath)
 
-                            dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                            if ext[1:] == "ts":
+                                media_format = "mp4"
+                            else:
+                                media_format = ext[1:]
+
+                            dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
                             dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                            dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                            dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{media_format}"
                             dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
@@ -3722,22 +3716,27 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                 base, ext = os.path.splitext(media_filepath)
 
-                src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{ext[1:]}"
+                if ext[1:] == "ts":
+                    media_format = "mp4"
+                else:
+                    media_format = ext[1:]
+
+                src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{media_format}"
                 src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
 
-                dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
                 dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                src_dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.tmp.embedded.{ext[1:]}"
+                src_dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
                 src_dst_tmp_embedded_media_file_display_name = os.path.basename(src_dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{ext[1:]}"
+                src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{media_format}"
                 src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
 
-                dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{media_format}"
                 dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
 
-                src_dst_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.embedded.{ext[1:]}"
+                src_dst_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.embedded.{media_format}"
                 src_dst_embedded_media_file_display_name = os.path.basename(src_dst_embedded_media_filepath).split('/')[-1]
                 
 
@@ -4140,7 +4139,7 @@ def main():
     if args.list_formats:
         print("Supported subtitle formats :")
         for subtitle_format in SubtitleFormatter.supported_formats:
-            print("{format}".format(format=subtitle_format))
+            print(f"{subtitle_format}")
         parser.exit(0)
 
     if args.list_languages:
@@ -4829,11 +4828,11 @@ def main():
 
                     else:
                         if sys.platform == "win32":
-                            #print("thread_record_streaming.is_alive() = {}".format(thread_record_streaming.is_alive()))
+                            #print(f"thread_record_streaming.is_alive() = {thread_record_streaming.is_alive()}")
                             stop_record_streaming_windows()
 
                         elif sys.platform == "linux":
-                            #print("thread_record_streaming.is_alive() = {}".format(thread_record_streaming.is_alive()))
+                            #print(f"thread_record_streaming.is_alive() = {thread_record_streaming.is_alive()}")
                             stop_record_streaming_linux()
 
 
@@ -4855,8 +4854,8 @@ def main():
                 sg.Popup(msg, title="Info", line_width=50, any_key_closes=True)
 
 
-        #print("event = {}".format(event))
-        #print("values = {}".format(values))
+        #print(f"event = {event}")
+        #print(f"values = {values}")
 
     if thread_transcribe and thread_transcribe.is_alive():
         stop_thread(thread_transcribe)
