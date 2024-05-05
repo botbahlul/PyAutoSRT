@@ -98,3 +98,5 @@ UPDATE NOTES : SINCE VERSION 0.1.1 YOU CAN SELECT MULTIPLE VIDEO/AUDIO FILES, BU
 MIT
 
 Check my other SPEECH RECOGNITIION + TRANSLATE PROJECTS https://github.com/botbahlul?tab=repositories
+
+Buy me coffee : https://sociabuzz.com/botbahlul/tribe
