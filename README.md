@@ -10,7 +10,11 @@ SINCE VERSION 0.1.14 I ADDED streamlink MODULE WHICH SUPPORTS urllib3 >=1.26.0, 
 pip install streamlink --force-reinstall
 ```
 
-TO COMPILE THAT pyautosrt.pyw IN LINUX/WIN FOLDER WITH pyinstaller YOU SHOULD USE THAT \"mypyinstaller.sh\"/\"mypyinstaller.bat\"
+TO COMPILE THAT pyautosrt.pyw IN linux/win FOLDER WITH pyinstaller YOU SHOULD USE THAT \"mypyinstaller.sh\"/\"mypyinstaller.bat\"
+
+The executable compiled file will be placed by pyinstaller into dist subfolder of your current working folder, so you can just rename and put that compiled file into a folder that has been added to your PATH ENVIRONTMENT so you can execute it from anywhere
+
+I was succesfuly compiled it in Windows 10 with pyinstaller-5.10.1 and Pyhton-3.10.4, and python-3.10.4 in Debian 10
 
 ### Auto generate subtitles files for any video/audio files
 
@@ -40,16 +44,6 @@ To install this pyautosrt, just type :
 ```
 pip install pyautosrt
 ```
-
-You can compile this script into a single executable file with pyinstaller by downloading "\__init\__.py" file, rename it to pyautosrt.py and type :
-```
-pip install pyinstaller
-pyinstaller --onefile pyautosrt.py
-```
-
-The executable compiled file will be placed by pyinstaller into dist subfolder of your current working folder, so you can just rename and put that compiled file into a folder that has been added to your PATH ENVIRONTMENT so you can execute it from anywhere
-
-I was succesfuly compiled it in Windows 10 with pyinstaller-5.1 and Pyhton-3.10.4, and python-3.10.4 in Debian 10
 
 Another alternative way to install this script with python is by cloning this git (or downloading this git as zip then extract it into a folder), and then just type :
 
