@@ -28,7 +28,7 @@ install_requires=[
     "pysrt>=1.0.1",
     "six>=1.11.0",
     "pysimplegui>=4.60.1",
-    "streamlink>=5.3.1",
+    "streamlink>=8.5.0",
     "urllib3>=1.26.0,<3.0",
 ]
 
