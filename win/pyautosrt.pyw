@@ -35,6 +35,8 @@ from datetime import datetime, timedelta
 import shutil
 import select
 import shlex
+import re
+from threading import Timer
 
 #import warnings
 #warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -42,7 +44,7 @@ import shlex
 #sys.tracebacklimit = 0
 
 
-VERSION = "0.2.9"
+VERSION = "0.2.10"
 
 
 class Language:
@@ -1112,87 +1114,584 @@ class SpeechRecognizer(object):
 
 
 class SentenceTranslator(object):
-    def __init__(self, src, dst, patience=-1, timeout=30, error_messages_callback=None):
+    def __init__(
+        self,
+        src,
+        dst,
+        endpoint_config,
+        patience=-1,
+        timeout=30,
+        error_messages_callback=None
+    ):
         self.src = src
         self.dst = dst
+        self.endpoint_config = endpoint_config
         self.patience = patience
         self.timeout = timeout
         self.error_messages_callback = error_messages_callback
 
     def __call__(self, sentence):
+
         try:
-            translated_sentence = []
-            # handle the special case: empty string.
+
             if not sentence:
                 return None
-            translated_sentence = self.GoogleTranslate(sentence, src=self.src, dst=self.dst, timeout=self.timeout)
-            fail_to_translate = translated_sentence[-1] == '\n'
+
+            translated_sentence = self.GoogleTranslate(
+                sentence,
+                src=self.src,
+                dst=self.dst,
+                timeout=self.timeout
+            )
+
+            if translated_sentence is None:
+                return None
+
+            translated_sentence = str(translated_sentence)
+
+            if not translated_sentence:
+                return None
+
+            fail_to_translate = translated_sentence.endswith('\n')
+
+            patience = self.patience
+
             while fail_to_translate and patience:
-                translated_sentence = self.GoogleTranslate(translated_sentence, src=self.src, dst=self.dst, timeout=self.timeout).text
-                if translated_sentence[-1] == '\n':
+
+                translated_sentence = self.GoogleTranslate(
+                    translated_sentence,
+                    src=self.src,
+                    dst=self.dst,
+                    timeout=self.timeout
+                )
+
+                if translated_sentence is None:
+                    return None
+
+                translated_sentence = str(translated_sentence)
+
+                if translated_sentence.endswith('\n'):
+
                     if patience == -1:
                         continue
+
                     patience -= 1
+
                 else:
                     fail_to_translate = False
 
             return translated_sentence
 
         except KeyboardInterrupt:
+
             if self.error_messages_callback:
                 self.error_messages_callback("Cancelling all tasks")
             else:
                 print("Cancelling all tasks")
-            return
+
+            return None
 
         except Exception as e:
+
             if self.error_messages_callback:
                 self.error_messages_callback(e)
             else:
                 print(e)
-            return
+
+            return None
 
     def GoogleTranslate(self, text, src, dst, timeout=30):
-        url = 'https://translate.googleapis.com/translate_a/'
-        params = 'single?client=gtx&sl='+src+'&tl='+dst+'&dt=t&q='+text;
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Referer': 'https://translate.google.com',}
+
+        endpoint_type = self.endpoint_config.get("type")
 
         try:
-            response = requests.get(url+params, headers=headers, timeout=self.timeout)
-            if response.status_code == 200:
-                response_json = response.json()[0]
-                length = len(response_json)
+
+            # ========================================================
+            # ENDPOINT 1
+            # ========================================================
+
+            if endpoint_type == 1:
+
+                url = self.endpoint_config["url"]
+
+                params = {
+                    "client": "gtx",
+                    "sl": src,
+                    "tl": dst,
+                    "dt": "t",
+                    "q": text
+                }
+
+                headers = self.endpoint_config["headers"]
+
+                response = requests.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=timeout
+                )
+
+                if response.status_code != 200:
+                    print(
+                        "Google Translate HTTP error: %s"
+                        % response.status_code
+                    )
+                    return None
+
+                try:
+                    data = response.json()
+                except ValueError:
+                    print("Google Translate returned invalid JSON:")
+                    print(response.text[:500])
+                    return None
+
+                if not isinstance(data, list) or not data:
+                    return None
+
+                response_json = data[0]
+
+                if not isinstance(response_json, list):
+                    return None
+
                 translation = ""
-                for i in range(length):
-                    translation = translation + response_json[i][0]
-                return translation
-            return
+
+                for item in response_json:
+
+                    if isinstance(item, list) and len(item) > 0:
+                        if isinstance(item[0], str):
+                            translation += item[0]
+
+                if translation:
+                    return translation
+
+                return None
+
+            # ========================================================
+            # ENDPOINT 2
+            # ========================================================
+
+            elif endpoint_type == 2:
+
+                url = self.endpoint_config["url"]
+
+                params = {
+                    "client": "dict-chrome-ex",
+                    "sl": src,
+                    "tl": dst,
+                    "q": text
+                }
+
+                headers = self.endpoint_config["headers"]
+
+                response = requests.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=timeout
+                )
+
+                if response.status_code != 200:
+                    print(
+                        "Google Translate HTTP error: %s"
+                        % response.status_code
+                    )
+                    return None
+
+                try:
+                    data = response.json()
+                except ValueError:
+                    print("Google Translate returned invalid JSON:")
+                    print(response.text[:500])
+                    return None
+
+                if isinstance(data, list) and len(data) > 0:
+
+                    translation = data[0]
+
+                    # Normal response:
+                    # ["Halo"]
+
+                    if isinstance(translation, str):
+                        return translation
+
+                    # Nested response
+
+                    if isinstance(translation, list):
+
+                        result = ""
+
+                        for item in translation:
+
+                            if isinstance(item, str):
+                                result += item
+
+                            elif isinstance(item, list) and len(item) > 0:
+
+                                if isinstance(item[0], str):
+                                    result += item[0]
+
+                        if result:
+                            return result
+
+                print("Unexpected Google Translate response:")
+                print(data)
+
+                return None
+
+            else:
+
+                print("Invalid Google Translate endpoint configuration.")
+                return None
 
         except requests.exceptions.ConnectionError:
-            with httpx.Client() as client:
-                response = client.get(url+params, headers=headers, timeout=self.timeout)
-                if response.status_code == 200:
-                    response_json = response.json()[0]
-                    length = len(response_json)
-                    translation = ""
-                    for i in range(length):
-                        translation = translation + response_json[i][0]
-                    return translation
-                return
+
+            # ========================================================
+            # FALLBACK HTTPX
+            # ========================================================
+
+            try:
+
+                if endpoint_type == 1:
+
+                    url = self.endpoint_config["url"]
+
+                    params = {
+                        "client": "gtx",
+                        "sl": src,
+                        "tl": dst,
+                        "dt": "t",
+                        "q": text
+                    }
+
+                elif endpoint_type == 2:
+
+                    url = self.endpoint_config["url"]
+
+                    params = {
+                        "client": "dict-chrome-ex",
+                        "sl": src,
+                        "tl": dst,
+                        "q": text
+                    }
+
+                else:
+                    return None
+
+                headers = self.endpoint_config["headers"]
+
+                with httpx.Client() as client:
+
+                    response = client.get(
+                        url,
+                        params=params,
+                        headers=headers,
+                        timeout=timeout
+                    )
+
+                if response.status_code != 200:
+                    return None
+
+                try:
+                    data = response.json()
+                except ValueError:
+                    return None
+
+                # Endpoint 1
+
+                if endpoint_type == 1:
+
+                    if isinstance(data, list) and len(data) > 0:
+
+                        response_json = data[0]
+
+                        if isinstance(response_json, list):
+
+                            translation = ""
+
+                            for item in response_json:
+
+                                if (
+                                    isinstance(item, list)
+                                    and len(item) > 0
+                                    and isinstance(item[0], str)
+                                ):
+                                    translation += item[0]
+
+                            if translation:
+                                return translation
+
+                # Endpoint 2
+
+                elif endpoint_type == 2:
+
+                    if isinstance(data, list) and len(data) > 0:
+
+                        translation = data[0]
+
+                        if isinstance(translation, str):
+                            return translation
+
+                        if isinstance(translation, list):
+
+                            result = ""
+
+                            for item in translation:
+
+                                if isinstance(item, str):
+                                    result += item
+
+                                elif (
+                                    isinstance(item, list)
+                                    and len(item) > 0
+                                    and isinstance(item[0], str)
+                                ):
+                                    result += item[0]
+
+                            if result:
+                                return result
+
+                return None
+
+            except Exception as e:
+
+                if self.error_messages_callback:
+                    self.error_messages_callback(e)
+                else:
+                    print(e)
+
+                return None
 
         except KeyboardInterrupt:
+
             if self.error_messages_callback:
                 self.error_messages_callback("Cancelling all tasks")
             else:
                 print("Cancelling all tasks")
-            return
+
+            return None
 
         except Exception as e:
+
             if self.error_messages_callback:
                 self.error_messages_callback(e)
             else:
                 print(e)
-            return
+
+            return None
+
+
+# ================================================================
+# TEST ENDPOINT
+# ================================================================
+
+def test_translation_endpoint(src, dst, error_messages_callback=None):
+
+    """
+    Menguji kedua endpoint Google Translate.
+
+    Return:
+
+        dictionary endpoint aktif
+
+        atau None jika kedua endpoint gagal.
+
+    Struktur:
+
+        {
+            "type": 1 atau 2,
+            "url": "...",
+            "params": {...},
+            "headers": {...}
+        }
+    """
+
+    test_sentence = "Hello"
+
+    #print("")
+    #print("CHECKING GOOGLE TRANSLATE ENDPOINT")
+    #print("=================================-")
+
+    # ============================================================
+    # ENDPOINT 1
+    # ============================================================
+
+    endpoint1 = {
+        "type": 1,
+
+        "url": (
+            "https://translate.googleapis.com/"
+            "translate_a/single"
+        ),
+
+        "params": {
+            "client": "gtx",
+            "sl": src,
+            "tl": dst,
+            "dt": "t",
+            "q": test_sentence
+        },
+
+        "headers": {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64)"
+            ),
+            "Referer": "https://translate.google.com"
+        }
+    }
+
+    try:
+
+        #print("Testing SentenceTranslator endpoint 1...")
+        #print("URL: %s" % endpoint1["url"])
+
+        response = requests.get(
+            endpoint1["url"],
+            params=endpoint1["params"],
+            headers=endpoint1["headers"],
+            timeout=10
+        )
+
+        if response.status_code == 200:
+
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+
+            translation = None
+
+            if isinstance(data, list) and len(data) > 0:
+
+                response_json = data[0]
+
+                if isinstance(response_json, list):
+
+                    result = ""
+
+                    for item in response_json:
+
+                        if (
+                            isinstance(item, list)
+                            and len(item) > 0
+                            and isinstance(item[0], str)
+                        ):
+                            result += item[0]
+
+                    if result:
+                        translation = result
+
+            if translation:
+                #print("SentenceTranslator endpoint 1 : OK")
+                #print("Translation test result         : %s" % translation)
+                #print("Using endpoint 1")
+                #print("")
+                return endpoint1
+
+        #print("SentenceTranslator endpoint 1 : FAILED " "(HTTP %s)" % response.status_code)
+
+    except Exception as e:
+            if self.error_messages_callback:
+                self.error_messages_callback(e)
+            else:
+                print(e)
+
+    # ============================================================
+    # ENDPOINT 2
+    # ============================================================
+
+    endpoint2 = {
+        "type": 2,
+
+        "url": "https://clients5.google.com/translate_a/t",
+
+        "params": {
+            "client": "dict-chrome-ex",
+            "sl": src,
+            "tl": dst,
+            "q": test_sentence
+        },
+
+        "headers": {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 "
+                "(KHTML, like Gecko) "
+                "Chrome/139.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json,text/plain,*/*"
+        }
+    }
+
+    try:
+
+        #print("Testing SentenceTranslator endpoint 2...")
+        #print("URL: %s" % endpoint2["url"])
+
+        response = requests.get(
+            endpoint2["url"],
+            params=endpoint2["params"],
+            headers=endpoint2["headers"],
+            timeout=10
+        )
+
+        if response.status_code == 200:
+
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+
+            translation = None
+
+            if isinstance(data, list) and len(data) > 0:
+
+                first = data[0]
+
+                if isinstance(first, str):
+
+                    translation = first
+
+                elif isinstance(first, list):
+
+                    result = ""
+
+                    for item in first:
+
+                        if isinstance(item, str):
+                            result += item
+
+                        elif (
+                            isinstance(item, list)
+                            and len(item) > 0
+                            and isinstance(item[0], str)
+                        ):
+                            result += item[0]
+
+                    if result:
+                        translation = result
+
+            if translation:
+                #print("SentenceTranslator endpoint 2 : OK")
+                #print("Translation test result         : %s" % translation)
+                #print("Using endpoint 2")
+                #print("")
+                return endpoint2
+
+        #print("SentenceTranslator endpoint 2 : FAILED " "(HTTP %s)" % response.status_code)
+
+    except Exception as e:
+            if self.error_messages_callback:
+                self.error_messages_callback(e)
+            else:
+                print(e)
+
+    #print("")
+    #print("ERROR: Both Google Translate endpoints are unavailable.")
+    #print("")
+
+    return None
 
 
 class SubtitleFormatter:
@@ -1660,7 +2159,8 @@ class MediaSubtitleRenderer:
                 raise Exception("Dependency not found: ffmpeg")
 
         try:
-            scale_switch = "'trunc(iw/2)*2'\:'trunc(ih/2)*2'"
+            #scale_switch = "'trunc(iw/2)*2'\:'trunc(ih/2)*2'"
+            scale_switch = "'trunc(iw/2)*2':'trunc(ih/2)*2'"
             ffmpeg_command = [
                                 'ffmpeg',
                                 '-hide_banner',
@@ -2102,6 +2602,160 @@ class MediaSubtitleRemover:
             return
 
 
+def check_file_type(media_filepath, error_messages_callback=None):
+    def which(program):
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+        fpath, _ = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if is_exe(exe_file):
+                    return exe_file
+        return None
+
+    def ffprobe_check():
+        if which("ffprobe"):
+            return "ffprobe"
+        if which("ffprobe.exe"):
+            return "ffprobe.exe"
+        return None
+
+    if "\\" in media_filepath:
+        media_filepath = media_filepath.replace("\\", "/")
+
+    if not os.path.isfile(media_filepath):
+        if error_messages_callback:
+           error_messages_callback(f"The given file does not exist: '{media_filepath}'")
+        else:
+            print(f"The given file does not exist: '{media_filepath}'")
+            raise Exception(f"Invalid file: '{media_filepath}'")
+    if not ffprobe_check():
+        if error_messages_callback:
+            error_messages_callback("Cannot find ffprobe executable")
+        else:
+            print("Cannot find ffprobe executable")
+            raise Exception("Dependency not found: ffprobe")
+
+    try:
+        ffprobe_cmd = [
+                        'ffprobe',
+                        '-hide_banner',
+                        '-loglevel', 'error',
+                        '-v', 'error',
+                        '-show_format',
+                        '-show_streams',
+                        '-print_format',
+                        'json',
+                        media_filepath
+                      ]
+
+        output = None
+
+        if sys.platform == "win32":
+            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
+        else:
+            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE).decode('utf-8')
+
+        data = json.loads(output)
+
+        if 'streams' in data:
+            for stream in data['streams']:
+                if 'codec_type' in stream and stream['codec_type'] == 'audio':
+                    return 'audio'
+                elif 'codec_type' in stream and stream['codec_type'] == 'video':
+                    return 'video'
+
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        pass
+
+    except Exception as e:
+        if error_messages_callback:
+            error_messages_callback(e)
+        else:
+            print(e)
+
+    return None
+
+
+def has_subtitles(media_filepath, error_messages_callback=None):
+    def which(program):
+        def is_exe(file_path):
+            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+        fpath, _ = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if is_exe(exe_file):
+                    return exe_file
+        return None
+
+    def ffmpeg_check():
+        if which("ffmpeg"):
+            return "ffmpeg"
+        if which("ffmpeg.exe"):
+            return "ffmpeg.exe"
+        return None
+
+    if "\\" in media_filepath:
+        media_filepath = media_filepath.replace("\\", "/")
+
+    if not os.path.isfile(media_filepath):
+        if error_messages_callback:
+           error_messages_callback(f"The given file does not exist: '{media_filepath}'")
+        else:
+            print(f"The given file does not exist: '{media_filepath}'")
+            raise Exception(f"Invalid file: '{media_filepath}'")
+    if not ffmpeg_check():
+        if error_messages_callback:
+            error_messages_callback("Cannot find ffmpeg executable")
+        else:
+            print("Cannot find ffmpeg executable")
+            raise Exception("Dependency not found: ffmpeg")
+
+    try:
+        if "\\" in media_filepath:
+            media_filepath = media_filepath.replace("\\", "/")
+
+        ffmpeg_cmd = [
+                        'ffmpeg',
+                        '-hide_banner',
+                        '-v', 'error',
+                        '-loglevel', 'error',
+                        '-y',
+                        '-i', media_filepath,
+                        '-map', '0:s:0',
+                        '-f', 'srt',
+                        '-'
+                     ]
+
+        result = None
+        if sys.platform == "win32":
+            result = subprocess.run(ffmpeg_cmd, stdin=open(os.devnull), capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            result = subprocess.run(ffmpeg_cmd, stdin=open(os.devnull), capture_output=True, text=True)
+
+        if result.stdout:
+            return True  # Subtitles detected
+        else:
+            return False  # No subtitles detected
+
+    except Exception as e:
+        if self.error_messages_callback:
+            self.error_messages_callback(e)
+        else:
+            print(e)
+        return False
+
+
 def stop_ffmpeg_windows(error_messages_callback=None):
     try:
         tasklist_output = subprocess.check_output(['tasklist'], creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
@@ -2188,86 +2842,6 @@ def is_same_language(src, dst, error_messages_callback=None):
         return
 
 
-def check_file_type(media_filepath, error_messages_callback=None):
-    def which(program):
-        def is_exe(file_path):
-            return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
-        fpath, _ = os.path.split(program)
-        if fpath:
-            if is_exe(program):
-                return program
-        else:
-            for path in os.environ["PATH"].split(os.pathsep):
-                path = path.strip('"')
-                exe_file = os.path.join(path, program)
-                if is_exe(exe_file):
-                    return exe_file
-        return None
-
-    def ffprobe_check():
-        if which("ffprobe"):
-            return "ffprobe"
-        if which("ffprobe.exe"):
-            return "ffprobe.exe"
-        return None
-
-    if "\\" in media_filepath:
-        media_filepath = media_filepath.replace("\\", "/")
-
-    if not os.path.isfile(media_filepath):
-        if error_messages_callback:
-           error_messages_callback(f"The given file does not exist: '{media_filepath}'")
-        else:
-            print(f"The given file does not exist: '{media_filepath}'")
-            raise Exception(f"Invalid file: '{media_filepath}'")
-    if not ffprobe_check():
-        if error_messages_callback:
-            error_messages_callback("Cannot find ffprobe executable")
-        else:
-            print("Cannot find ffprobe executable")
-            raise Exception("Dependency not found: ffprobe")
-
-    try:
-        ffprobe_cmd = [
-                        'ffprobe',
-                        '-hide_banner',
-                        '-loglevel', 'error',
-                        '-v', 'error',
-                        '-show_format',
-                        '-show_streams',
-                        '-print_format',
-                        'json',
-                        media_filepath
-                      ]
-
-        output = None
-
-        if sys.platform == "win32":
-            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW).decode('utf-8')
-        else:
-            output = subprocess.check_output(ffprobe_cmd, stdin=open(os.devnull), stderr=subprocess.PIPE).decode('utf-8')
-
-        data = json.loads(output)
-
-        if 'streams' in data:
-            for stream in data['streams']:
-                if 'codec_type' in stream and stream['codec_type'] == 'audio':
-                    return 'audio'
-                elif 'codec_type' in stream and stream['codec_type'] == 'video':
-                    return 'video'
-
-    except (subprocess.CalledProcessError, json.JSONDecodeError):
-        pass
-
-    except Exception as e:
-        if error_messages_callback:
-            error_messages_callback(e)
-        else:
-            print(e)
-
-    return None
-
-
 #----------------------------------------------------------- MISC FUNCTIONS -----------------------------------------------------------#
 
 
@@ -2301,7 +2875,7 @@ def move_center(window):
     window.move(x, y)
     window.refresh()
 
-def get_clipboard_text():
+def get_clipboard_text_bak():
     try:
         clipboard_data = subprocess.check_output(['xclip', '-selection', 'clipboard', '-o'], universal_newlines=True)
         return clipboard_data.strip()
@@ -2309,13 +2883,51 @@ def get_clipboard_text():
         # Handle the case when clipboard is empty or unsupported
         return None
 
+def get_clipboard_text():
+    global main_window
+    # Coba akses clipboard native Tkinter dulu (tidak butuh binari eksternal)
+    try:
+        data = main_window.TKroot.clipboard_get()
+        if data:
+            return data
+    except Exception:
+        pass
+    # Fallback ke xclip jika tersedia
+    try:
+        clipboard_data = subprocess.check_output(
+            ['xclip', '-selection', 'clipboard', '-o'],
+            universal_newlines=True,
+            stderr=subprocess.DEVNULL
+        )
+        return clipboard_data
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
 
-def set_clipboard_text(text):
+def set_clipboard_text_bak(text):
     try:
         subprocess.run(['xclip', '-selection', 'clipboard'], input=text.encode())
     except subprocess.CalledProcessError as e:
         show_error_messages(e)
 
+def set_clipboard_text(text):
+    global main_window
+    # Coba pakai clipboard native Tkinter dulu (tidak butuh binari eksternal)
+    try:
+        main_window.TKroot.clipboard_clear()
+        main_window.TKroot.clipboard_append(text)
+        main_window.TKroot.update()  # supaya clipboard tetap terisi setelah window kehilangan fokus
+        return
+    except Exception:
+        pass
+    # Fallback ke xclip jika tersedia
+    try:
+        subprocess.run(
+            ['xclip', '-selection', 'clipboard'],
+            input=text.encode(),
+            stderr=subprocess.DEVNULL
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        show_error_messages(e)
 
 def scroll_to_last_line(window, element):
     if isinstance(element.Widget, tk.Text):
@@ -2454,18 +3066,19 @@ def record_streaming_windows(hls_url, media_filepath, error_messages_callback=No
                         'ffmpeg',
                         '-hide_banner',
                         '-loglevel', 'error',
-                        '-v', 'error',
                         '-y',
                         '-i', hls_url,
                         '-movflags', '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov',
                         '-fflags', 'nobuffer',
+                        '-progress', 'pipe:1',
+                        '-nostats',
                         media_filepath
                      ]
 
         if sys.platform == "win32":
-            process = subprocess.Popen(ffmpeg_cmd, shell=True, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW)
+            process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW, universal_newlines=True, bufsize=1)
         else:
-            process = subprocess.Popen(ffmpeg_cmd, stderr=subprocess.PIPE)
+            process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, bufsize=1)
 
         msg = "RECORDING"
         main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
@@ -2474,13 +3087,19 @@ def record_streaming_windows(hls_url, media_filepath, error_messages_callback=No
             if not_recording:
                 break
 
-            for line in iter(process.stderr.readline, b''):
-                line = line.decode('utf-8').rstrip()
+            # -progress pipe:1 writes "key=value" lines to stdout, always flushed with a real newline,
+            # e.g. out_time=00:00:04.000000 ... progress=continue
+            for line in iter(process.stdout.readline, ''):
+                line = line.rstrip()
 
-                if 'time=' in line:
-                    time_str = line.split('time=')[1].split()[0]
-                    streaming_duration_recorded = datetime.strptime(time_str, "%H:%M:%S.%f") - datetime(1900, 1, 1)
-                    main_window.write_event_value('-EVENT-STREAMING-DURATION-RECORDED-', streaming_duration_recorded)
+                if line.startswith('out_time='):
+                    time_str = line.split('=', 1)[1]
+                    if time_str and time_str != 'N/A':
+                        streaming_duration_recorded = datetime.strptime(time_str, "%H:%M:%S.%f") - datetime(1900, 1, 1)
+                        main_window.write_event_value('-EVENT-STREAMING-DURATION-RECORDED-', streaming_duration_recorded)
+
+                if not_recording or process.poll() is not None:
+                    break
 
         process.wait()
 
@@ -2492,8 +3111,8 @@ def record_streaming_windows(hls_url, media_filepath, error_messages_callback=No
 
 
 # subprocess.Popen(ffmpeg_cmd) THREAD BEHAVIOR IS DIFFERENT IN LINUX
-def record_streaming_linux(url, output_file, error_messages_callback=None):
-    global recognizing, ffmpeg_start_run_time, first_streaming_duration_recorded, main_window
+def record_streaming_linux_bak(url, output_file, error_messages_callback=None):
+    global recognizing, ffmpeg_start_run_time, first_streaming_duration_recorded, not_recording, main_window
 
     #ffmpeg_cmd = ['ffmpeg', '-y', '-i', url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', output_file]
     ffmpeg_cmd = [
@@ -2514,11 +3133,13 @@ def record_streaming_linux(url, output_file, error_messages_callback=None):
 
     # Define a function to run the ffmpeg process in a separate thread
     def run_ffmpeg():
+        global main_window
         try:
             i = 0
             line = None
 
-            process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            #process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, bufsize=1)
 
             msg = "RECORDING"
             main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
@@ -2594,6 +3215,75 @@ def record_streaming_linux(url, output_file, error_messages_callback=None):
         # Return the thread object so that the caller can join it if needed
         return thread
 
+def record_streaming_linux(url, output_file, error_messages_callback=None):
+    global recognizing, ffmpeg_start_run_time, first_streaming_duration_recorded, main_window, \
+           not_recording, current_ffmpeg_record_process
+    ffmpeg_cmd = [
+                    'ffmpeg',
+                    '-hide_banner',
+                    '-loglevel', 'error',
+                    '-v', 'error',
+                    '-y',
+                    '-i', f'{url}',
+                    '-movflags',
+                    '+frag_keyframe+separate_moof+omit_tfhd_offset+empty_moov',
+                    '-fflags',
+                    'nobuffer',
+                    '-progress', 'pipe:1',
+                    '-nostats',
+                    f'{output_file}'
+                 ]
+    ffmpeg_start_run_time = datetime.now()
+    try:
+        i = 0
+        line = None
+        process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, bufsize=1)
+        current_ffmpeg_record_process = process
+        msg = "RECORDING"
+        main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
+        timeout = 1.0
+        timer = Timer(timeout, lambda: None)
+        timer.start()
+        while not not_recording:
+            if process.poll() is not None:
+                break
+            rlist, _, _ = select.select([process.stdout], [], [], timeout)
+            if not rlist:
+                continue
+            line = rlist[0].readline().strip()
+            if line.startswith('out_time='):
+                time_value = line.split('=', 1)[1]
+                if time_value and time_value != 'N/A':
+                    if i == 0:
+                        first_streaming_duration_recorded = datetime.strptime(time_value, "%H:%M:%S.%f") - datetime(1900, 1, 1)
+                        i += 1
+                        time_value_filename = "time_value"
+                        time_value_filepath = os.path.join(tempfile.gettempdir(), time_value_filename)
+                        with open(time_value_filepath, "w") as time_value_file:
+                            time_value_file.write(time_value)
+                    streaming_duration_recorded = datetime.strptime(time_value, "%H:%M:%S.%f") - datetime(1900, 1, 1)
+                    main_window.write_event_value('-EVENT-STREAMING-DURATION-RECORDED-', streaming_duration_recorded)
+            timer.cancel()
+            timer = Timer(timeout, lambda: None)
+            if not not_recording:
+                timer.start()
+        # Loop selesai (not_recording == True atau proses berhenti sendiri) -> hentikan ffmpeg dengan bersih
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        process.stdout.close()
+        process.stderr.close()
+        current_ffmpeg_record_process = None
+        msg = "TERMINATED"
+        main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
+    except Exception as e:
+        if error_messages_callback:
+            error_messages_callback(e)
+        else:
+            print(e)
 
 def stop_record_streaming_windows():
     global main_window, thread_record_streaming
@@ -2628,31 +3318,25 @@ def stop_record_streaming_windows():
         msg = "NOT RECORDING"
         main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
 
-
 def stop_record_streaming_linux():
-    global main_window, thread_record_streaming
-
-    if thread_record_streaming and thread_record_streaming.is_alive():
-        print("thread_record_streaming.is_alive()")
-        exc = ctypes.py_object(SystemExit)
-        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_record_streaming.ident), exc)
-        if res == 0:
-            raise ValueError("nonexistent thread id")
-        elif res > 1:
-            # '''if it returns a number greater than one, you're in trouble,
-            # and you should call it again with exc=NULL to revert the effect'''
-            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_record_streaming.ident, None)
-            raise SystemError("PyThreadState_SetAsyncExc failed")
-
+    global main_window, thread_record_streaming, not_recording, current_ffmpeg_record_process
+    not_recording = True  # loop di record_streaming_linux akan keluar sendiri (maks ~1 detik)
+    # Jaga-jaga kalau proses masih hidup padahal thread sudah tidak lagi looping
+    if current_ffmpeg_record_process and current_ffmpeg_record_process.poll() is None:
+        try:
+            current_ffmpeg_record_process.terminate()
+            current_ffmpeg_record_process.wait(timeout=5)
+        except Exception:
+            try:
+                current_ffmpeg_record_process.kill()
+            except Exception:
+                pass
+    if thread_record_streaming:
+        thread_record_streaming.join(timeout=3)
+        thread_record_streaming = None
     msg = "TERMINATED"
-    if main_window: main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
-
-    ffmpeg_pid = subprocess.check_output(['pgrep', '-f', 'ffmpeg']).strip()
-    if ffmpeg_pid:
-        subprocess.Popen(['kill', ffmpeg_pid])
-    else:
-        msg = 'FFMPEG HAS TERMINATED'
-        if main_window: main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
+    if main_window:
+        main_window.write_event_value('-EVENT-THREAD-RECORD-STREAMING-STATUS-', msg)
 
 
 def show_progress(info, media_file_display_name, progress, start_time):
@@ -2686,11 +3370,28 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
             removed_media_filepaths, completed_tasks, start_time
 
     media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+    #print(f"media_file_display_name = '{media_file_display_name}'")
 
     results = []
 
+    subtitle_embedded_media_file_format = None
+    subtitle_embedded_media_file_base_name = None
+
+    base, ext = os.path.splitext(media_filepath)
+    #print(f"base = '{base}'")
+    #print(f"ext = '{ext}'")
+    if media_type == "video":
+        if ext[1:] == "ts":
+            subtitle_embedded_media_file_format = "mp4"
+            subtitle_embedded_media_file_base_name = base
+        else:
+            subtitle_embedded_media_file_format = ext[1:]
+            subtitle_embedded_media_file_base_name = base
+        #print(f"subtitle_embedded_media_file_format = '{subtitle_embedded_media_file_format}'")
+        #print(f"subtitle_embedded_media_file_base_name = '{subtitle_embedded_media_file_base_name}'")
+
     # CHECKING SUBTITLE STREAMS
-    if force_recognize == False:
+    if media_type == "video" and force_recognize == False:
 
         #media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
         src_subtitle_filepath = None
@@ -2777,7 +3478,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         append_flag = True
                         main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-                        # remove media_filepath from transcribe proceed_list
+                        # remove media_filepath from transcribe processed_list
                         if force_recognize == False:
                             if media_filepath not in removed_media_filepaths:
                                 removed_media_filepaths.append(media_filepath)
@@ -2946,7 +3647,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         total = 100
                         start_time = time.time()
 
-                        transcript_translator = SentenceTranslator(src=dst, dst=src, error_messages_callback=show_error_messages)
+                        transcript_translator = SentenceTranslator(src=dst, dst=src, endpoint_config=endpoint_config, error_messages_callback=show_error_messages)
 
                         if not_transcribing: return
 
@@ -3032,17 +3733,10 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
 
-                            base, ext = os.path.splitext(media_filepath)
-
-                            if ext[1:] == "ts":
-                                media_format = "mp4"
-                            else:
-                                media_format = ext[1:]
-
-                            src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{media_format}"
+                            src_tmp_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.tmp.embedded.{subtitle_embedded_media_file_format}"
                             src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
 
-                            src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{media_format}"
+                            src_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.embedded.{subtitle_embedded_media_file_format}"
                             src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
@@ -3136,7 +3830,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                         total = 100
                         start_time = time.time()
 
-                        transcript_translator = SentenceTranslator(src=src, dst=dst, error_messages_callback=show_error_messages)
+                        transcript_translator = SentenceTranslator(src=src, dst=dst, endpoint_config=endpoint_config, error_messages_callback=show_error_messages)
 
                         if not_transcribing: return
 
@@ -3225,17 +3919,10 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                             ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
 
-                            base, ext = os.path.splitext(media_filepath)
-
-                            if ext[1:] == "ts":
-                                media_format = "mp4"
-                            else:
-                                media_format = ext[1:]
-
-                            dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
+                            dst_tmp_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_dst_language_code}.tmp.embedded.{subtitle_embedded_media_file_format}"
                             dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                            dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{media_format}"
+                            dst_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_dst_language_code}.embedded.{subtitle_embedded_media_file_format}"
                             dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
 
                             window_key = '-PROGRESS-LOG-'
@@ -3588,7 +4275,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                     start_time = time.time()
 
-                    transcript_translator = SentenceTranslator(src=src, dst=dst, error_messages_callback=show_error_messages)
+                    transcript_translator = SentenceTranslator(src=src, dst=dst, endpoint_config=endpoint_config, error_messages_callback=show_error_messages)
                     translated_transcriptions = []
 
                     for i, translated_transcription in enumerate(pool[media_filepath].imap(transcript_translator, created_transcripts)):
@@ -3675,7 +4362,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                     completed_tasks += 1
                     main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
 
-                if not is_same_language(src, dst, error_messages_callback=show_error_messages):
+                if not is_same_language(src, dst, error_messages_callback=show_error_messages) and embed_src == False:
                     window_key = '-PROGRESS-LOG-'
                     msg = f"'{media_file_display_name}' translated subtitles file saved as :\n  '{dst_subtitle_filepath}'\n"
                     append_flag = True
@@ -3714,35 +4401,53 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                 ffmpeg_src_language_code = language.ffmpeg_code_of_code[src]
                 ffmpeg_dst_language_code = language.ffmpeg_code_of_code[dst]
 
-                base, ext = os.path.splitext(media_filepath)
-
-                if ext[1:] == "ts":
-                    media_format = "mp4"
-                else:
-                    media_format = ext[1:]
-
-                src_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.tmp.embedded.{media_format}"
+                src_tmp_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.tmp.embedded.{subtitle_embedded_media_file_format}"
                 src_tmp_embedded_media_file_display_name = os.path.basename(src_tmp_embedded_media_filepath).split('/')[-1]
 
-                dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
+                dst_tmp_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_dst_language_code}.tmp.embedded.{subtitle_embedded_media_file_format}"
                 dst_tmp_embedded_media_file_display_name = os.path.basename(dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                src_dst_tmp_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.tmp.embedded.{media_format}"
+                src_dst_tmp_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.tmp.embedded.{subtitle_embedded_media_file_format}"
                 src_dst_tmp_embedded_media_file_display_name = os.path.basename(src_dst_tmp_embedded_media_filepath).split('/')[-1]
 
-                src_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.embedded.{media_format}"
+                src_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.embedded.{subtitle_embedded_media_file_format}"
                 src_embedded_media_file_display_name = os.path.basename(src_embedded_media_filepath).split('/')[-1]
 
-                dst_embedded_media_filepath = f"{base}.{ffmpeg_dst_language_code}.embedded.{media_format}"
+                dst_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_dst_language_code}.embedded.{subtitle_embedded_media_file_format}"
                 dst_embedded_media_file_display_name = os.path.basename(dst_embedded_media_filepath).split('/')[-1]
 
-                src_dst_embedded_media_filepath = f"{base}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.embedded.{media_format}"
+                src_dst_embedded_media_filepath = f"{subtitle_embedded_media_file_base_name}.{ffmpeg_src_language_code}.{ffmpeg_dst_language_code}.embedded.{subtitle_embedded_media_file_format}"
                 src_dst_embedded_media_file_display_name = os.path.basename(src_dst_embedded_media_filepath).split('/')[-1]
                 
 
                 if is_same_language(src, dst, error_messages_callback=show_error_messages):
 
-                    if embed_src == True:
+                    if media_type == "audio":
+                        window_key = '-PROGRESS-LOG-'
+                        msg = "Subtitles can only be embedded into video file, not audio file\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        window_key = '-RESULTS-'
+                        msg = f"Results for '{media_file_display_name}' :\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        for result in results:
+                            window_key = '-RESULTS-'
+                            msg = f"{result}\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        window_key = '-RESULTS-'
+                        msg = "\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        completed_tasks += 1
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
+                    if media_type == "video" and embed_src == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
                             msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into {media_file_display_name}...\n"
@@ -3795,7 +4500,6 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
                                 append_flag = True
                                 main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
 
-
                         except Exception as e:
                             not_transcribing = True
                             main_window.write_event_value("-EXCEPTION-", e)
@@ -3803,7 +4507,32 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                 elif not is_same_language(src, dst, error_messages_callback=show_error_messages):
 
-                    if embed_src == True and embed_dst == True:
+                    if media_type == "audio":
+                        window_key = '-PROGRESS-LOG-'
+                        msg = "Subtitles can only be embedded into video file, not audio file\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        window_key = '-RESULTS-'
+                        msg = f"Results for '{media_file_display_name}' :\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        for result in results:
+                            window_key = '-RESULTS-'
+                            msg = f"{result}\n"
+                            append_flag = True
+                            main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        window_key = '-RESULTS-'
+                        msg = "\n"
+                        append_flag = True
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+                        completed_tasks += 1
+                        main_window.write_event_value('-EVENT-TRANSCRIBE-TASKS-COMPLETED-', completed_tasks)
+
+                    if media_type == "video" and embed_src == True and embed_dst == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
                             msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
@@ -3876,7 +4605,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                         if not_transcribing: return
 
-                    elif embed_src == True and embed_dst == False:
+                    elif media_type == "video" and embed_src == True and embed_dst == False:
                         try:
                             window_key = '-PROGRESS-LOG-'
                             msg = f"Embedding '{ffmpeg_src_language_code}' subtitles file '{src_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
@@ -3936,7 +4665,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
                         if not_transcribing: return
 
-                    elif embed_src == False and embed_dst == True:
+                    elif media_type == "video" and embed_src == False and embed_dst == True:
                         try:
                             window_key = '-PROGRESS-LOG-'
                             msg = f"Embedding '{ffmpeg_dst_language_code}' subtitles file '{dst_subtitle_file_display_name}' into '{media_file_display_name}'...\n"
@@ -4009,7 +4738,7 @@ def transcribe(src, dst, media_filepath, media_type, subtitle_format, embed_src,
 
 def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, embed_dst, force_recognize):
     global main_window, language, pool, thread_check_subtitle_stream, thread_transcribe, thread_transcribe_starter, \
-            removed_media_filepaths, completed_tasks, proceed_list
+            removed_media_filepaths, completed_tasks, processed_list
 
     window_key = '-PROGRESS-LOG-'
     msg = ''
@@ -4024,41 +4753,56 @@ def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, e
     main_window.write_event_value('-EVENT-UPDATE-PROGRESS-BAR-', ("...", "Progress info", 0, "0%", 0, "00", "00", "00"))
 
     removed_media_filepaths = []
-    proceed_list = []
+    processed_list = []
 
     for media_filepath in media_filepaths:
 
         media_file_display_name = os.path.basename(media_filepath).split('/')[-1]
+        #print(f"media_file_display_name = {media_file_display_name}")
+        media_type = check_file_type(media_filepath, error_messages_callback=show_error_messages)
+        #print(f"media_type = {media_type}")
 
-        if force_recognize == True:
+        if media_type == "video" and force_recognize == True:
+
             base, ext = os.path.splitext(media_filepath)
-            tmp_subtitle_removed_media_filepath = f"{base}.tmp.subtitles.removed.{ext[1:]}"
-            subtitle_removed_media_filepath = f"{base}.force.recognize.{ext[1:]}"
+            force_recognize_media_file_format = None
+            if ext[1:] == "ts":
+                force_recognize_media_file_format = "mp4"
+            else:
+                force_recognize_media_file_format = ext[1:]
 
-            subtitle_remover = MediaSubtitleRemover(output_path=tmp_subtitle_removed_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
-            tmp_output = subtitle_remover(media_filepath)
+            tmp_subtitle_removed_media_filepath = f"{base}.tmp.subtitles.removed.{force_recognize_media_file_format}"
+            subtitle_removed_media_filepath = f"{base}.force.recognize.{force_recognize_media_file_format}"
 
-            if os.path.isfile(tmp_output):
-                shutil.copy(tmp_output, subtitle_removed_media_filepath)
-                os.remove(tmp_output)
+            if has_subtitles(media_filepath, error_messages_callback=show_error_messages):
+                subtitle_remover = MediaSubtitleRemover(output_path=tmp_subtitle_removed_media_filepath, progress_callback=show_progress, error_messages_callback=show_error_messages)
+                tmp_output = subtitle_remover(media_filepath)
 
-                proceed_list.append(subtitle_removed_media_filepath)
+                if os.path.isfile(tmp_output):
+                    shutil.copy(tmp_output, subtitle_removed_media_filepath)
+                    os.remove(tmp_output)
 
-                window_key = '-PROGRESS-LOG-'
-                msg = f"Removing all subtitle streams from '{media_file_display_name}' and save as :\n  '{subtitle_removed_media_filepath}'\n"
-                append_flag = True
-                main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+                    processed_list.append(subtitle_removed_media_filepath)
+
+                    window_key = '-PROGRESS-LOG-'
+                    msg = f"Removing all subtitle streams from '{media_file_display_name}' and save as :\n  '{subtitle_removed_media_filepath}'\n"
+                    append_flag = True
+                    main_window.write_event_value('-EVENT-TRANSCRIBE-MESSAGES-', (window_key, msg, append_flag))
+
+            else:
+                processed_list.append(media_filepath)
 
         else:
-            proceed_list = media_filepaths
+            processed_list.append(media_filepath)
 
 
-    if proceed_list:
+    #print(f"processed_list = {processed_list}")
+    if processed_list:
 
-        pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in proceed_list}
-        media_types = {media_filepath: check_file_type(media_filepath, error_messages_callback=show_error_messages) for media_filepath in proceed_list}
+        pool = {media_filepath: multiprocessing.Pool(16, initializer=NoConsoleProcess) for media_filepath in processed_list}
+        media_types = {media_filepath: check_file_type(media_filepath, error_messages_callback=show_error_messages) for media_filepath in processed_list}
         
-        for media_filepath in proceed_list:
+        for media_filepath in processed_list:
 
             if os.path.isfile(media_filepath):
                 thread_transcribe = Thread(target=transcribe, args=(src, dst, media_filepath, media_types[media_filepath], subtitle_format, embed_src, embed_dst, force_recognize), daemon=True)
@@ -4070,11 +4814,14 @@ def start_transcription(media_filepaths, src, dst, subtitle_format, embed_src, e
 
 def main():
     global language, not_transcribing, thread_transcribe, thread_transcribe_starter, pool, removed_media_filepaths, \
-        completed_tasks, not_recording, thread_record_streaming, main_window
+        completed_tasks, not_recording, thread_record_streaming, main_window, endpoint_config, \
+            thread_record_streaming, current_ffmpeg_record_process
 
     transcribe_start_time = None
     transcribe_end_time = None
     transcribe_elapsed_time = None
+    thread_record_streaming = None
+    current_ffmpeg_record_process = None
 
     video_file_types = [
         ('MP4 Files', '*.mp4'),
@@ -4157,6 +4904,7 @@ def main():
     argpath = None
 
     media_type = None
+    media_format = None
     embed_src = False
     embed_dst = False
     force_recognize = False
@@ -4273,6 +5021,16 @@ def main():
         else:
             subtitle_format = args.format
             sg_combo_subtitle_format_values = subtitle_format
+
+    # ============================================================
+    # TEST ENDPOINT ONCE
+    # ============================================================
+    endpoint_config = None
+    if not is_same_language(args.src_language, args.dst_language, error_messages_callback=show_error_messages):
+        endpoint_config = test_translation_endpoint(args.src_language,args.dst_language,error_messages_callback=show_error_messages)
+        if endpoint_config is None:
+            print("ERROR: No working Google Translate endpoint.")
+            return 1
 
 
 #------------------------------------------------------------- MAIN WINDOW -------------------------------------------------------------#
@@ -4464,31 +5222,27 @@ def main():
                     text_elem.Widget.icursor(cursor_position)
                     text_elem.Widget.xview_moveto(1.0)
 
-
         if event == 'Exit' or event == sg.WIN_CLOSED:
-
-            if not not_transcribing:
-
+            if not not_transcribing or not not_recording:
                 answer = popup_yes_no('Are you sure?', title='Confirm')
-
                 if 'Yes' in answer:
-
-                    not_transcribing = True
-                    main_window['-START-'].update(('Cancel','Start')[not_transcribing], button_color=(('white', ('red', '#283b5b')[not_transcribing])))
-
-                    if thread_transcribe and thread_transcribe.is_alive():
-                        stop_thread(thread_transcribe)
-
-                    if thread_transcribe_starter and thread_transcribe_starter.is_alive():
-                        stop_thread(thread_transcribe_starter)
-
-                    main_window['-PROGRESS-LOG-'].update("\n--- Canceling all tasks ---\n", append=True)
-                    scroll_to_last_line(main_window, main_window['-PROGRESS-LOG-'])
+                    if not not_transcribing:
+                        not_transcribing = True
+                        main_window['-START-'].update(('Cancel','Start')[not_transcribing],         button_color=(('white', ('red', '#283b5b')[not_transcribing])))
+                        if thread_transcribe and thread_transcribe.is_alive():
+                            stop_thread(thread_transcribe)
+                        if thread_transcribe_starter and thread_transcribe_starter.is_alive():
+                            stop_thread(thread_transcribe_starter)
+                        main_window['-PROGRESS-LOG-'].update("\n--- Canceling all tasks ---\n", append=True)
+                        scroll_to_last_line(main_window, main_window['-PROGRESS-LOG-'])
+                    if not not_recording:
+                        if sys.platform == "win32":
+                            stop_record_streaming_windows()
+                        else:
+                            stop_record_streaming_linux()
                     break
-
             else:
                 break
-
 
         elif event == '-SRC-':
 
@@ -4817,7 +5571,7 @@ def main():
                                 thread_record_streaming.start()
 
                             elif sys.platform == "linux":
-                                thread_record_streaming = Thread(target=record_streaming_linux, args=(stream_url.url, tmp_recorded_streaming_filepath))
+                                thread_record_streaming = Thread(target=record_streaming_linux, args=(stream_url.url, tmp_recorded_streaming_filepath, show_error_messages), daemon=True)
                                 thread_record_streaming.start()
 
                         else:
