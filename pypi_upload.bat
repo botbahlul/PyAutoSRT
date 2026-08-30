@@ -1,0 +1,1 @@
+@twine upload --verbose dist/*
