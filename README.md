@@ -29,7 +29,7 @@ You can get latest version of ffmpeg from https://www.ffmpeg.org/
 
 If it doesn't run well then you need to install python on your Windows system.
 
-In Linux you have to install this script with python (version minimal 3.8 ) and install ffmpeg with your linux package manager for example in debian based linux distribution you can type :
+In Linux you have to install this script with python (version minimal 3.10 ) and install ffmpeg with your linux package manager for example in debian based linux distribution you can type :
 
 ```
 apt update
