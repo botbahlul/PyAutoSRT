@@ -30,6 +30,7 @@ install_requires=[
     "pysimplegui>=4.60.1",
     "streamlink>=8.5.0",
     "urllib3>=1.26.0,<3.0",
+    "audioop-lts; python_version >= '3.13'",
 ]
 
 setup(
