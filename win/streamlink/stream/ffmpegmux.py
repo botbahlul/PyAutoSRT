@@ -7,6 +7,7 @@ import sys
 import threading
 from contextlib import suppress
 from functools import lru_cache
+from itertools import zip_longest
 from pathlib import Path
 from shutil import which
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TextIO, TypeVar
@@ -57,29 +58,33 @@ class MuxedStream(Stream, Generic[TSubstreams_co]):
         self.subtitles: dict[str, Stream] = options.pop("subtitles", {})
         self.options: dict[str, Any] = options
 
-    def open(self):
-        fds = []
+    def _open_streams(self) -> list[StreamIO]:
+        fds: list[StreamIO] = []
         metadata = self.options.get("metadata", {})
         maps = self.options.get("maps", [])
         # only update the maps values if they haven't been set
         update_maps = not maps
-        for substream in self.substreams:
-            log.debug("Opening %s substream", substream.shortname())
+        for stream in self.substreams:
+            log.debug("Opening %s substream", stream.shortname())
             if update_maps:
                 maps.append(len(fds))
-            fds.append(substream and substream.open())
+            fds.append(stream.open())
 
         for i, subtitle in enumerate(self.subtitles.items()):
-            language, substream = subtitle
-            log.debug("Opening %s subtitle stream", substream.shortname())
+            language, subtitle_stream = subtitle
+            log.debug("Opening %s subtitle stream", subtitle_stream.shortname())
             if update_maps:
                 maps.append(len(fds))
-            fds.append(substream and substream.open())
+            fds.append(subtitle_stream.open())
             metadata[f"s:s:{i}"] = [f"language={language}"]
 
         self.options["metadata"] = metadata
         self.options["maps"] = maps
 
+        return fds
+
+    def open(self):
+        fds = self._open_streams()
         return FFMPEGMuxer(self.session, *fds, **self.options).open()
 
     @classmethod
@@ -206,6 +211,7 @@ class FFMPEGMuxer(StreamIO):
         audiocodec = session.options.get("ffmpeg-audio-transcode") or options.pop("acodec", self.DEFAULT_AUDIO_CODEC)
         metadata = options.pop("metadata", {})
         maps = options.pop("maps", [])
+        itsoffset = options.get("itsoffset", [])
         copyts = session.options.get("ffmpeg-copyts") or options.pop("copyts", False)
         start_at_zero = session.options.get("ffmpeg-start-at-zero") or options.pop("start_at_zero", False)
 
@@ -217,7 +223,12 @@ class FFMPEGMuxer(StreamIO):
             loglevel,
         ]
 
-        for np in self.pipes:
+        for np, itsoffset_item in zip_longest(self.pipes, itsoffset, fillvalue=None):
+            if np is None:
+                break
+            # align tracks by provided PTS
+            if itsoffset_item is not None:
+                self._cmd.extend(["-itsoffset", f"{itsoffset_item}"])
             self._cmd.extend(["-i", str(np.path)])
 
         self._cmd.extend(["-c:v", videocodec])

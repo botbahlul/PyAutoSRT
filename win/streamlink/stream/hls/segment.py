@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 from streamlink.logger import getLogger
 from streamlink.stream.segmented.segment import Segment
@@ -11,7 +12,12 @@ from streamlink.utils.l10n import Language
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from datetime import datetime, timedelta
+
+    from requests import Response
+
+    from streamlink.utils.l10n import Localization
 
 
 log = getLogger(".".join(__name__.split(".")[:-1]))
@@ -140,6 +146,130 @@ class HLSPlaylist:
     media: list[Media]
     is_iframe: bool
 
+    MIN_FRAMERATE: ClassVar[float] = 30.0
+
+    def get_name(self, *, key: str = "", fmt: str | None = None, prefix: str | None = None) -> str | None:
+        name: str | None
+        names = {
+            "name": self.get_name_name(),
+            "pixels": self.get_name_pixels(),
+            "bitrate": self.get_name_bandwidth(),
+        }
+
+        if fmt:
+            name = fmt.format(**names)
+        else:
+            name = (
+                names.get(key)
+                or names.get("name")
+                or names.get("pixels")
+                or names.get("bitrate")
+            )  # fmt: skip
+
+        if not name:
+            return None
+
+        if prefix:
+            name = f"{prefix}{name}"
+
+        return name
+
+    def get_name_name(self) -> str | None:
+        res = None
+        for media in self.media:
+            if media.type == "VIDEO" and media.name:
+                # apparently, we don't return the first name (kept old logic after refactoring this)
+                res = media.name
+
+        return res
+
+    def get_name_pixels(self, with_framerate: bool | None = None) -> str | None:
+        stream_info = self.stream_info
+
+        if not stream_info.resolution or not stream_info.resolution.height:
+            return None
+
+        if (
+            isinstance(stream_info, StreamInfo)
+            and stream_info.framerate is not None
+            and (with_framerate or with_framerate is None and stream_info.framerate > self.MIN_FRAMERATE)
+        ):
+            return f"{stream_info.resolution.height}p{math.ceil(stream_info.framerate)}"
+
+        return f"{stream_info.resolution.height}p"
+
+    def get_name_bandwidth(self) -> str | None:
+        if not (bw := self.stream_info.bandwidth):
+            return None
+
+        if bw >= 1000:
+            return f"{int(bw / 1000.0)}k"
+        else:
+            return f"{bw / 1000.0}k"
+
+    def get_external_audio(
+        self,
+        *,
+        locale: Localization,
+        any_language: bool,
+        languages: list[Language],
+        codes: list[str],
+    ) -> list[Media]:
+        audio_streams = []
+        fallback_audio: list[Media] = []
+        default_audio: list[Media] = []
+        preferred_audio: list[Media] = []
+
+        for media in self.media:
+            if media.type == "AUDIO":
+                audio_streams.append(media)
+
+        for media in audio_streams:
+            # Media without a URI is not relevant as external audio
+            if not media.uri:
+                continue
+
+            if not fallback_audio and media.default:
+                fallback_audio = [media]
+
+            # if the media is "autoselect" and it better matches the user's preferences, use that instead of default
+            if not default_audio and (media.autoselect and locale.equivalent(language=media.parsed_language)):
+                default_audio = [media]
+
+            # select the first audio stream that matches the user's explict language selection
+            if (
+                # user has selected all languages
+                any_language
+                # compare plain language codes first
+                or (
+                    media.language is not None
+                    and media.language in codes
+                )
+                # then compare parsed language codes and user input
+                or (
+                    media.parsed_language is not None
+                    and media.parsed_language in languages
+                )
+                # then compare media name attribute
+                or (
+                    media.name
+                    and media.name.lower() in codes
+                )
+                # fallback: find first media playlist matching the user's locale
+                or (
+                    (not preferred_audio or media.default)
+                    and locale.explicit
+                    and locale.equivalent(language=media.parsed_language)
+                )
+            ):  # fmt: skip
+                preferred_audio.append(media)
+
+        # final fallback on the first audio stream listed
+        if not fallback_audio and audio_streams and audio_streams[0].uri:
+            fallback_audio = audio_streams[:1]
+
+        return preferred_audio or default_audio or fallback_audio
+
 
 @dataclass(kw_only=True)
 class HLSSegment(Segment):
@@ -148,3 +278,10 @@ class HLSSegment(Segment):
     byterange: ByteRange | None
     date: datetime | None
     map: Map | None
+
+    # noinspection PyMethodMayBeStatic
+    def get_content(self, response: Response) -> bytes:
+        return response.content
+
+    def iter_content(self, response: Response, chunk_size: int) -> Iterator[bytes]:
+        yield from response.iter_content(chunk_size)
